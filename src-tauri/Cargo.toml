@@ -1,6 +1,6 @@
 [package]
 name = "codex-usage-companion"
-version = "0.1.0"
+version = "0.1.1"
 description = "A local-first floating usage companion for Codex"
 authors = ["Codex Usage Companion contributors"]
 edition = "2021"

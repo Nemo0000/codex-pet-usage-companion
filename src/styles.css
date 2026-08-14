@@ -4,9 +4,9 @@
   background: transparent;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --bg: rgba(248, 250, 249, 0.97);
-  --surface: #ffffff;
-  --surface-muted: #f2f5f4;
+  --bg: rgba(248, 250, 249, 0.82);
+  --surface: rgba(255, 255, 255, 0.68);
+  --surface-muted: rgba(242, 245, 244, 0.58);
   --border: #dfe7e4;
   --border-strong: #cbd8d4;
   --text: #14201f;
@@ -18,14 +18,14 @@
   --warning: #bc7114;
   --danger: #cb4b4b;
   --focus: #0e8278;
-  --shadow: 0 20px 48px rgba(20, 41, 37, 0.18), 0 2px 8px rgba(20, 41, 37, 0.08);
+  --shadow: 0 14px 32px rgba(20, 41, 37, 0.12);
 }
 
 :root[data-theme="dark"] {
   color: #eef5f3;
-  --bg: rgba(20, 27, 26, 0.97);
-  --surface: #202a28;
-  --surface-muted: #18211f;
+  --bg: rgba(20, 27, 26, 0.84);
+  --surface: rgba(32, 42, 40, 0.72);
+  --surface-muted: rgba(24, 33, 31, 0.62);
   --border: #34413e;
   --border-strong: #45534f;
   --text: #eef5f3;
@@ -37,15 +37,15 @@
   --warning: #e5a34d;
   --danger: #ec7777;
   --focus: #77d2c3;
-  --shadow: 0 20px 52px rgba(0, 0, 0, 0.46), 0 2px 8px rgba(0, 0, 0, 0.26);
+  --shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
 }
 
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
     color: #eef5f3;
-    --bg: rgba(20, 27, 26, 0.97);
-    --surface: #202a28;
-    --surface-muted: #18211f;
+    --bg: rgba(20, 27, 26, 0.84);
+    --surface: rgba(32, 42, 40, 0.72);
+    --surface-muted: rgba(24, 33, 31, 0.62);
     --border: #34413e;
     --border-strong: #45534f;
     --text: #eef5f3;
@@ -57,7 +57,7 @@
     --warning: #e5a34d;
     --danger: #ec7777;
     --focus: #77d2c3;
-    --shadow: 0 20px 52px rgba(0, 0, 0, 0.46), 0 2px 8px rgba(0, 0, 0, 0.26);
+    --shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
   }
 }
 
@@ -113,7 +113,7 @@ button:disabled {
 .app-shell {
   width: 100%;
   height: 100%;
-  padding: 10px;
+  padding: 0;
   color: var(--text);
 }
 
@@ -127,7 +127,7 @@ button:disabled {
   border-radius: 20px;
   background: var(--bg);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(24px) saturate(125%);
 }
 
 .titlebar {
@@ -137,7 +137,13 @@ button:disabled {
   min-height: 68px;
   padding: 12px 12px 10px 16px;
   border-bottom: 1px solid var(--border);
+  cursor: grab;
   user-select: none;
+}
+
+.titlebar:active,
+.compact-card__drag:active {
+  cursor: grabbing;
 }
 
 .titlebar__brand,
@@ -526,7 +532,7 @@ button:disabled {
 
 .settings-overlay {
   position: absolute;
-  inset: 10px;
+  inset: 0;
   z-index: 10;
   display: grid;
   place-items: stretch;
@@ -670,7 +676,7 @@ legend {
 }
 
 .app-shell--compact {
-  padding: 8px;
+  padding: 0;
 }
 
 .compact-card {

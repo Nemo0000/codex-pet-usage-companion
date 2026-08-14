@@ -37,10 +37,10 @@ codex app-server --help
 ## Installation
 
 1. Download the Windows x64 installer from the project release, or build it locally.
-2. Run `Codex Usage Companion_0.1.0_x64-setup.exe`.
+2. Run `Codex Usage Companion_0.1.1_x64-setup.exe`.
 3. Launch the app and complete the official browser sign-in if Codex is not already signed in.
 
-The local v0.1.0 build is not code-signed. Windows may identify an unsigned installer;
+The local v0.1.1 build is not code-signed. Windows may identify an unsigned installer;
 public releases should be signed before wider distribution.
 
 ## Development

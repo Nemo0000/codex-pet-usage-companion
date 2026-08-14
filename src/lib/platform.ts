@@ -50,6 +50,13 @@ export async function beginChatGptLogin(): Promise<LoginStartResult> {
   return result;
 }
 
+export async function waitForChatGptLogin(loginId: string): Promise<DashboardSnapshot> {
+  if (!isTauriRuntime()) {
+    throw new Error("RUNTIME_UNAVAILABLE::Login requires the desktop app");
+  }
+  return invoke<DashboardSnapshot>("wait_for_chatgpt_login", { loginId });
+}
+
 export async function restartAppServer(): Promise<DashboardSnapshot> {
   if (!isTauriRuntime()) return mockSnapshot;
   return invoke<DashboardSnapshot>("restart_app_server");

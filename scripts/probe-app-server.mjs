@@ -1,8 +1,13 @@
 import { spawn } from "node:child_process";
 import readline from "node:readline";
 
-const executable = process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : "codex";
-const args = process.platform === "win32" ? ["/d", "/s", "/c", "codex app-server"] : ["app-server"];
+const explicitExecutable = process.env.CODEX_CLI_PATH;
+const executable = explicitExecutable || (process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : "codex");
+const args = explicitExecutable
+  ? ["app-server"]
+  : process.platform === "win32"
+    ? ["/d", "/s", "/c", "codex app-server"]
+    : ["app-server"];
 const child = spawn(executable, args, {
   stdio: ["pipe", "pipe", "ignore"],
   windowsHide: true,
@@ -10,6 +15,7 @@ const child = spawn(executable, args, {
 const lines = readline.createInterface({ input: child.stdout });
 const pending = new Map();
 let nextId = 1;
+const refreshToken = process.env.PROBE_REFRESH === "1";
 
 function send(message) {
   child.stdin.write(`${JSON.stringify(message)}\n`);
@@ -59,9 +65,19 @@ try {
   send({ method: "initialized", params: {} });
   console.log("initialize: ok");
 
-  const accountResult = await request("account/read", { refreshToken: false });
+  const accountResult = await request("account/read", { refreshToken });
   const account = accountResult?.account;
   console.log(`account: ${account ? "connected" : "not signed in"}`);
+  if (process.env.PROBE_LIMITS === "1") {
+    try {
+      const limits = await request("account/rateLimits/read");
+      console.log(`rate-limits response: ${limits ? "received" : "empty"}`);
+      console.log(`rate-limit buckets: ${Object.keys(limits?.rateLimitsByLimitId || {}).length}`);
+      console.log(`rate-limits keys: ${Object.keys(limits || {}).join(",") || "none"}`);
+    } catch (error) {
+      console.log(`rate-limits error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   if (account) {
     console.log(`auth type: ${account.type || "unknown"}`);
     console.log(`plan type: ${account.planType || "unknown"}`);

@@ -61,7 +61,15 @@ fn with_client<T>(
 }
 
 fn read_snapshot(client: &mut AppServerClient) -> Result<DashboardSnapshot, AppServerError> {
-    let account_result = client.request("account/read", json!({ "refreshToken": false }))?;
+    read_snapshot_with_refresh(client, false)
+}
+
+fn read_snapshot_with_refresh(
+    client: &mut AppServerClient,
+    refresh_token: bool,
+) -> Result<DashboardSnapshot, AppServerError> {
+    let account_result =
+        client.request("account/read", json!({ "refreshToken": refresh_token }))?;
     let account = account_result
         .get("account")
         .filter(|value| !value.is_null())
@@ -71,14 +79,11 @@ fn read_snapshot(client: &mut AppServerClient) -> Result<DashboardSnapshot, AppS
         .and_then(Value::as_bool)
         .unwrap_or(true);
 
-    let (rate_limits, rate_limits_error) = if account.is_some() {
+    let (rate_limits, rate_limits_error) =
         match client.request("account/rateLimits/read", json!({})) {
             Ok(value) => (Some(value), None),
             Err(error) => (None, Some(error.to_string())),
-        }
-    } else {
-        (None, None)
-    };
+        };
 
     Ok(DashboardSnapshot {
         account,
@@ -122,6 +127,22 @@ async fn start_chatgpt_login(state: State<'_, AppState>) -> Result<LoginStartRes
                 auth_url: auth_url.to_string(),
                 login_id: login_id.to_string(),
             })
+        })
+    })
+    .await
+    .map_err(|error| format!("APP_SERVER_TASK::{error}"))?
+}
+
+#[tauri::command]
+async fn wait_for_chatgpt_login(
+    login_id: String,
+    state: State<'_, AppState>,
+) -> Result<DashboardSnapshot, String> {
+    let shared = state.client.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        with_client(&shared, |client| {
+            client.wait_for_login(&login_id)?;
+            read_snapshot_with_refresh(client, true)
         })
     })
     .await
@@ -213,6 +234,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             dashboard_snapshot,
             start_chatgpt_login,
+            wait_for_chatgpt_login,
             restart_app_server
         ])
         .setup(|app| {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
   AlertCircle,
   ChevronsDownUp,
@@ -32,6 +32,7 @@ import {
   isTauriRuntime,
   parseBackendError,
   restartAppServer,
+  waitForChatGptLogin,
 } from "./lib/platform";
 import type { DashboardSnapshot, UserSettings } from "./types";
 
@@ -53,6 +54,15 @@ function loadSettings(): UserSettings {
   } catch {
     return DEFAULT_SETTINGS;
   }
+}
+
+function snapshotHasUsage(snapshot: DashboardSnapshot): boolean {
+  const response = snapshot.rateLimits;
+  return Boolean(
+    snapshot.account ||
+      response?.rateLimits ||
+      Object.keys(response?.rateLimitsByLimitId ?? {}).length > 0,
+  );
 }
 
 function LoadingPanel({ language }: { language: UserSettings["language"] }) {
@@ -84,7 +94,6 @@ export default function App() {
   const [now, setNow] = useState(Date.now());
   const [autostart, setAutostart] = useState(false);
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
-  const loginAttempt = useRef(0);
   const language = settings.language;
   const appWindow = useMemo(() => (isTauriRuntime() ? getCurrentWindow() : null), []);
 
@@ -100,7 +109,7 @@ export default function App() {
       const nextSnapshot = await fetchDashboard();
       setSnapshot(nextSnapshot);
       setError(null);
-      setStatus(nextSnapshot.account ? "ready" : "unauthenticated");
+      setStatus(snapshotHasUsage(nextSnapshot) ? "ready" : "unauthenticated");
     } catch (caught) {
       setError(parseBackendError(caught));
       setStatus("error");
@@ -166,23 +175,18 @@ export default function App() {
   }, [appWindow]);
 
   const handleLogin = async () => {
-    const attempt = ++loginAttempt.current;
     setLoginBusy(true);
     setStatus("login-pending");
     setError(null);
     try {
-      await beginChatGptLogin();
-      for (let index = 0; index < 60 && loginAttempt.current === attempt; index += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 2_000));
-        const nextSnapshot = await fetchDashboard();
-        if (nextSnapshot.account) {
-          setSnapshot(nextSnapshot);
-          setStatus("ready");
-          setLoginBusy(false);
-          return;
-        }
+      const login = await beginChatGptLogin();
+      const nextSnapshot = await waitForChatGptLogin(login.loginId);
+      setSnapshot(nextSnapshot);
+      setStatus(snapshotHasUsage(nextSnapshot) ? "ready" : "unauthenticated");
+      if (snapshotHasUsage(nextSnapshot)) {
+        return;
       }
-      throw new Error("LOGIN_TIMEOUT::The browser sign-in did not finish in time");
+      throw new Error("LOGIN_INCOMPLETE::The browser sign-in completed without an account");
     } catch (caught) {
       setError(parseBackendError(caught));
       setStatus("error");
@@ -191,13 +195,20 @@ export default function App() {
     }
   };
 
+  const handleWindowDrag = (event: MouseEvent<HTMLElement>) => {
+    if (event.button !== 0 || !appWindow) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("button, input, select, textarea, a, [role='button']")) return;
+    void appWindow.startDragging();
+  };
+
   const handleReconnect = async () => {
     setRefreshing(true);
     try {
       const nextSnapshot = await restartAppServer();
       setSnapshot(nextSnapshot);
       setError(null);
-      setStatus(nextSnapshot.account ? "ready" : "unauthenticated");
+      setStatus(snapshotHasUsage(nextSnapshot) ? "ready" : "unauthenticated");
     } catch (caught) {
       setError(parseBackendError(caught));
       setStatus("error");
@@ -242,7 +253,7 @@ export default function App() {
     const severity = severityForRemaining(compactLimit.remainingPercent);
     return (
       <main className={`app-shell app-shell--compact compact-card compact-card--${severity}`}>
-        <div className="compact-card__drag" data-tauri-drag-region>
+        <div className="compact-card__drag" data-tauri-drag-region onMouseDown={handleWindowDrag}>
           <BrandMark small />
           <div className="compact-card__copy">
             <span>{compactLimit.label}</span>
@@ -259,7 +270,7 @@ export default function App() {
   return (
     <main className="app-shell">
       <section className="panel-card">
-        <header className="titlebar" data-tauri-drag-region>
+        <header className="titlebar" data-tauri-drag-region onMouseDown={handleWindowDrag}>
           <div className="titlebar__brand" data-tauri-drag-region>
             <BrandMark />
             <div data-tauri-drag-region>

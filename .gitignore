@@ -28,3 +28,6 @@ Thumbs.db
 # Test output
 coverage/
 *.tsbuildinfo
+
+# Local planning notes (kept outside the public repository)
+/PLAN.md

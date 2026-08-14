@@ -1,0 +1,30 @@
+# Dependencies and web output
+node_modules/
+dist/
+
+# Tauri and Rust output
+src-tauri/target/
+src-tauri/gen/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs and diagnostics
+*.log
+logs/
+diagnostics/
+
+# Editors and operating systems
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Test output
+coverage/
+

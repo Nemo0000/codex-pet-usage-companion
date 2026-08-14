@@ -17,4 +17,3 @@ Codex Usage Companion communicates with a locally spawned `codex app-server`
 process over standard input/output. The app does not scrape ChatGPT, read
 browser cookies, or upload usage data. Raw protocol payloads and authentication
 tokens must never be written to application logs.
-

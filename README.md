@@ -1,9 +1,9 @@
-# Codex Usage Companion
+# Codex Pet & Usage Companion
 
 [![CI](https://github.com/Nemo0000/codex-usage-companion/actions/workflows/ci.yml/badge.svg)](https://github.com/Nemo0000/codex-usage-companion/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Codex Usage Companion is an independent, local-first Windows tray app with a compact floating panel for viewing ChatGPT-backed Codex usage limits.
+Codex Pet & Usage Companion is an independent, local-first Windows tray app for switching community Codex pets and viewing ChatGPT-backed usage limits from one compact panel.
 
 > This is an independent open-source project. It is not an official OpenAI product.
 
@@ -17,10 +17,31 @@ Codex Usage Companion is an independent, local-first Windows tray app with a com
 - Start with Windows when desired.
 - Use the official browser sign-in flow when the local Codex session needs authentication.
 - English and Simplified Chinese interface support.
+- Open the Petdex community gallery directly from the homepage with **Change pet**.
+- Browse thousands of community-made Petdex pets with search, kind filters, attribution, and installed-state indicators.
+- Install a Petdex pet into `.codex/pets`, or install it and immediately attempt to select it in the official Codex desktop app.
+
+## Screenshots
+
+### Usage monitor
+
+![Codex usage monitor](docs/screenshots/usage-home-en.png)
+
+### Pet switcher
+
+![Petdex community pet switcher](docs/screenshots/petdex-gallery-en.png)
 
 ## How it works
 
 The app launches `codex app-server` locally and communicates over its stable `stdio` transport. It does not scrape ChatGPT pages, read browser cookies, or upload usage data. Email addresses are masked in the UI, and raw protocol messages and access tokens are never logged.
+
+### Petdex community gallery
+
+The app includes an in-app client for the public [Petdex](https://petdex.dev/) manifest. It does not run a second floating mascot: it downloads the selected community package, validates its trusted asset URLs, metadata, size, image format, and v1/v2 sprite grid, then installs it under `.codex/pets/<pet-id>` for the official Codex app.
+
+**Install only** adds the package without changing the active pet. **Install and use** additionally refreshes the already-open official Pets page, invokes its visible **Select** button, and checks for the **Selected** state. If UI automation is unavailable or the official UI changes, the package remains safely installed and the app asks the user to select it manually.
+
+Pet assets remain owned by their Petdex submitters. The gallery links to each source page so users can review attribution and licensing before redistributing an asset.
 
 ## Download
 
@@ -34,6 +55,7 @@ The initial release is an unsigned installer. Windows may display a warning befo
 - Microsoft Edge WebView2 Runtime
 - Codex CLI with `codex app-server` support
 - A ChatGPT-backed Codex sign-in for subscription rate-limit information
+- Internet access to `petdex.dev` and `assets.petdex.dev` when browsing or installing community pets
 
 Check the CLI from PowerShell before launching the app:
 
@@ -44,9 +66,9 @@ codex app-server --help
 
 ## Installation and first run
 
-1. Download the latest `Codex Usage Companion_*_x64-setup.exe` installer from the release page.
+1. Download the latest `Codex Pet & Usage Companion_*_x64-setup.exe` installer from the release page.
 2. Run the installer for the current Windows user.
-3. Launch Codex Usage Companion from the Start menu or desktop shortcut.
+3. Launch Codex Pet & Usage Companion from the Start menu or desktop shortcut.
 4. If Codex is not signed in, choose **Reconnect** and complete the official browser flow.
 5. Use the tray icon to show or hide the panel. Closing the panel hides it instead of exiting the app.
 
@@ -97,16 +119,19 @@ The close button hides the panel. Use the tray icon to show it again, or right-c
 
 ## Current scope
 
-Version `0.1.1` focuses on usage visibility, authentication compatibility, a movable translucent panel, and a quiet tray-first Windows experience. Reset-credit redemption is intentionally outside the current scope and may be considered for a future version.
+Version `0.3.3` includes the Petdex community gallery, validated v1/v2 package installation, installed-state tracking, and the verified Windows UI Automation bridge used by **Install and use**. The homepage **Change pet** entry opens the gallery directly; Settings contains only general app preferences. Community packages are written only under `.codex/pets`; official client installation files are not modified.
 
 ## Roadmap
 
 - Improve release packaging and signing for wider distribution.
 - Add more robust diagnostics that remain privacy-safe.
 - Evaluate additional usage windows and account actions based on official Codex App Server support.
+- Add read-only reset-credit visibility when the official App Server exposes it reliably.
+- Add more languages and local usage history.
+- Add explicit community-pet update and uninstall controls with package ownership checks.
 
 See [CHANGELOG.md](./CHANGELOG.md) for release history.
 
 ## License
 
-Codex Usage Companion is released under the [MIT License](./LICENSE).
+Codex Pet & Usage Companion is released under the [MIT License](./LICENSE).

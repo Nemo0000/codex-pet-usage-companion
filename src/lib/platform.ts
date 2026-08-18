@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { DashboardSnapshot, LoginStartResult } from "../types";
+import type {
+  DashboardSnapshot,
+  LoginStartResult,
+  OfficialPetSyncResult,
+  PetdexInstallResult,
+  PetdexManifestResult,
+} from "../types";
 
 export function isTauriRuntime(): boolean {
   return "__TAURI_INTERNALS__" in window;
@@ -48,6 +54,86 @@ export async function beginChatGptLogin(): Promise<LoginStartResult> {
   const result = await invoke<LoginStartResult>("start_chatgpt_login");
   await openUrl(result.authUrl);
   return result;
+}
+
+export async function syncOfficialCustomPet(displayName: string): Promise<OfficialPetSyncResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("RUNTIME_UNAVAILABLE::Official custom pet sync requires the Windows desktop app");
+  }
+  return invoke<OfficialPetSyncResult>("sync_official_custom_pet", { displayName });
+}
+
+const mockPetdexManifest: PetdexManifestResult = {
+  generatedAt: new Date().toISOString(),
+  total: 3,
+  pets: [
+    {
+      slug: "boba",
+      displayName: "Boba",
+      kind: "character",
+      submittedBy: "Petdex",
+      spritesheetUrl: "",
+      spriteVersionNumber: 2,
+      installed: false,
+    },
+    {
+      slug: "pixel-cat",
+      displayName: "Pixel Cat",
+      kind: "animal",
+      submittedBy: "Petdex",
+      spritesheetUrl: "",
+      spriteVersionNumber: 1,
+      installed: true,
+    },
+    {
+      slug: "tiny-orbit",
+      displayName: "Tiny Orbit",
+      kind: "mascot",
+      submittedBy: "Petdex",
+      spritesheetUrl: "",
+      spriteVersionNumber: 2,
+      installed: false,
+    },
+  ],
+};
+
+export async function fetchPetdexManifest(force = false): Promise<PetdexManifestResult> {
+  if (!isTauriRuntime()) {
+    if (import.meta.env.DEV) return mockPetdexManifest;
+    throw new Error("RUNTIME_UNAVAILABLE::Petdex browsing requires the desktop app");
+  }
+  return invoke<PetdexManifestResult>("fetch_petdex_manifest", { force });
+}
+
+export async function installPetdexPet(slug: string): Promise<PetdexInstallResult> {
+  if (!isTauriRuntime()) {
+    if (import.meta.env.DEV) {
+      const pet = mockPetdexManifest.pets.find((candidate) => candidate.slug === slug);
+      if (!pet) throw new Error("PETDEX_NOT_FOUND::The selected pet is unavailable");
+      return {
+        slug: pet.slug,
+        displayName: pet.displayName,
+        directoryPath: `.codex/pets/${pet.slug}`,
+        alreadyInstalled: pet.installed,
+        spriteVersionNumber: pet.spriteVersionNumber,
+        method: "petdex-community-package",
+      };
+    }
+    throw new Error("RUNTIME_UNAVAILABLE::Petdex installation requires the desktop app");
+  }
+  return invoke<PetdexInstallResult>("install_petdex_pet", { slug });
+}
+
+export async function openPetdexPetPage(slug: string): Promise<void> {
+  if (!/^[A-Za-z0-9_-]{1,96}$/.test(slug)) {
+    throw new Error("PETDEX_NOT_FOUND::The selected pet ID is invalid");
+  }
+  const url = `https://petdex.dev/pets/${encodeURIComponent(slug)}`;
+  if (isTauriRuntime()) {
+    await openUrl(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 export async function waitForChatGptLogin(loginId: string): Promise<DashboardSnapshot> {

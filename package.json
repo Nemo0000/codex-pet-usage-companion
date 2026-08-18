@@ -1,9 +1,9 @@
 {
   "name": "codex-usage-companion",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.3.3",
   "type": "module",
-  "description": "A local-first floating usage companion for Codex.",
+  "description": "A lightweight Windows companion for switching Codex pets and viewing ChatGPT-backed usage limits.",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },

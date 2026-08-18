@@ -62,3 +62,34 @@ export interface UserSettings {
   metric: MetricPreference;
   compact: boolean;
 }
+
+export interface OfficialPetSyncResult {
+  petId: "custom";
+  displayName: string;
+  method: "windows-ui-automation";
+}
+
+export interface PetdexPet {
+  slug: string;
+  displayName: string;
+  kind: string;
+  submittedBy: string;
+  spritesheetUrl: string;
+  spriteVersionNumber: 1 | 2;
+  installed: boolean;
+}
+
+export interface PetdexManifestResult {
+  generatedAt: string;
+  total: number;
+  pets: PetdexPet[];
+}
+
+export interface PetdexInstallResult {
+  slug: string;
+  displayName: string;
+  directoryPath: string;
+  alreadyInstalled: boolean;
+  spriteVersionNumber: 1 | 2;
+  method: "petdex-community-package";
+}

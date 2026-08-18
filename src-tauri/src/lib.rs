@@ -1,9 +1,12 @@
 mod app_server;
+mod petdex;
 
 use app_server::{AppServerClient, AppServerError};
+use petdex::{fetch_petdex_manifest, install_petdex_pet};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{
+    path::PathBuf,
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -33,6 +36,14 @@ struct DashboardSnapshot {
 struct LoginStartResult {
     auth_url: String,
     login_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OfficialPetSyncResult {
+    pet_id: String,
+    display_name: String,
+    method: &'static str,
 }
 
 fn now_millis() -> u128 {
@@ -165,6 +176,313 @@ async fn restart_app_server(state: State<'_, AppState>) -> Result<DashboardSnaps
     .map_err(|error| format!("APP_SERVER_TASK::{error}"))?
 }
 
+pub(crate) fn codex_pets_directory() -> Result<PathBuf, String> {
+    let home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .ok_or_else(|| "PET_DIRECTORY::The user home directory is unavailable".to_string())?;
+    Ok(PathBuf::from(home).join(".codex").join("pets"))
+}
+
+fn perform_official_custom_pet_sync(display_name: &str) -> Result<OfficialPetSyncResult, String> {
+    let display_name = display_name.trim();
+    if display_name.is_empty()
+        || display_name.chars().count() > 80
+        || display_name.chars().any(char::is_control)
+    {
+        return Err("PET_DISPLAY_NAME::The custom pet name is invalid".into());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let script = r#"
+$ErrorActionPreference = "Stop"
+try {
+  Add-Type -AssemblyName UIAutomationClient
+  Add-Type -AssemblyName UIAutomationTypes
+  Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class CodexPetWindowNative {
+  [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+}
+'@
+} catch {
+  "ERR|AUTOMATION_UNAVAILABLE"
+  exit 0
+}
+
+$target = $env:CODEX_USAGE_PET_TARGET
+$processes = @(Get-Process | Where-Object {
+  $_.ProcessName -in @("ChatGPT", "Codex")
+})
+
+if ($processes.Count -eq 0) {
+  "ERR|CHATGPT_NOT_RUNNING"
+  exit 0
+}
+
+function Get-PetsWindow {
+  $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+  foreach ($process in $processes) {
+    $condition = New-Object System.Windows.Automation.PropertyCondition(
+      [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+      $process.Id
+    )
+    $windows = $desktop.FindAll(
+      [System.Windows.Automation.TreeScope]::Children,
+      $condition
+    )
+    foreach ($window in $windows) {
+      try {
+        $windowNodes = $window.FindAll(
+          [System.Windows.Automation.TreeScope]::Descendants,
+          [System.Windows.Automation.Condition]::TrueCondition
+        )
+        $refresh = $windowNodes | Where-Object {
+          try {
+            $_.Current.ControlType.ProgrammaticName -eq "ControlType.Button" -and
+              $_.Current.Name -in @("Refresh", "刷新")
+          } catch { $false }
+        } | Select-Object -First 1
+        if ($null -ne $refresh) { return $window }
+      } catch {
+      }
+    }
+  }
+  return $null
+}
+
+function Find-RowButton {
+  param(
+    [System.Windows.Automation.AutomationElement]$WindowRoot,
+    [string]$TargetName,
+    [string[]]$ButtonNames
+  )
+  try {
+    $allNodes = $WindowRoot.FindAll(
+      [System.Windows.Automation.TreeScope]::Descendants,
+      [System.Windows.Automation.Condition]::TrueCondition
+    )
+  } catch {
+    return $null
+  }
+
+  $targetNodes = @($allNodes | Where-Object {
+    try {
+      $_.Current.Name -eq $TargetName -and
+        $_.Current.ControlType.ProgrammaticName -ne "ControlType.Button" -and
+        -not $_.Current.IsOffscreen
+    } catch { $false }
+  })
+  $best = $null
+  $bestScore = [double]::PositiveInfinity
+  foreach ($targetNode in $targetNodes) {
+    try {
+      $targetRect = $targetNode.Current.BoundingRectangle
+      if ($targetRect.Width -le 0 -or $targetRect.Height -le 0) { continue }
+      $targetCenterY = $targetRect.Y + $targetRect.Height / 2
+      foreach ($node in $allNodes) {
+        try {
+          if (
+            $node.Current.ControlType.ProgrammaticName -ne "ControlType.Button" -or
+            $node.Current.Name -notin $ButtonNames -or
+            $node.Current.IsOffscreen
+          ) { continue }
+          $buttonRect = $node.Current.BoundingRectangle
+          if ($buttonRect.X -le $targetRect.X + $targetRect.Width) { continue }
+          $deltaY = [math]::Abs(
+            ($buttonRect.Y + $buttonRect.Height / 2) - $targetCenterY
+          )
+          if ($deltaY -gt 48) { continue }
+          $score = $deltaY * 10000 + ($buttonRect.X - $targetRect.X)
+          if ($score -lt $bestScore) {
+            $best = $node
+            $bestScore = $score
+          }
+        } catch {
+        }
+      }
+    } catch {
+    }
+  }
+  return $best
+}
+
+$root = Get-PetsWindow
+
+if ($null -eq $root) {
+  "ERR|PETS_SETTINGS_NOT_OPEN"
+  exit 0
+}
+
+$windowHandle = [IntPtr]$root.Current.NativeWindowHandle
+if ($windowHandle -ne [IntPtr]::Zero) {
+  [CodexPetWindowNative]::ShowWindowAsync($windowHandle, 9) | Out-Null
+  [CodexPetWindowNative]::SetForegroundWindow($windowHandle) | Out-Null
+  Start-Sleep -Milliseconds 350
+  $root = Get-PetsWindow
+}
+
+try {
+  $nodes = $root.FindAll(
+    [System.Windows.Automation.TreeScope]::Descendants,
+    [System.Windows.Automation.Condition]::TrueCondition
+  )
+  $refreshButton = $nodes | Where-Object {
+    try {
+      $_.Current.ControlType.ProgrammaticName -eq "ControlType.Button" -and
+        $_.Current.Name -in @("Refresh", "刷新")
+    } catch { $false }
+  } | Select-Object -First 1
+  if ($null -eq $refreshButton) { throw "refresh button missing" }
+  $refreshPattern = $refreshButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+  $refreshPattern.Invoke()
+} catch {
+  "ERR|PETS_REFRESH_FAILED"
+  exit 0
+}
+
+$targetNodes = @()
+for ($attempt = 0; $attempt -lt 16; $attempt++) {
+  Start-Sleep -Milliseconds 350
+  $root = Get-PetsWindow
+  if ($null -eq $root) { continue }
+  $nodes = $root.FindAll(
+    [System.Windows.Automation.TreeScope]::Descendants,
+    [System.Windows.Automation.Condition]::TrueCondition
+  )
+  $targetNodes = @($nodes | Where-Object {
+    try {
+      $_.Current.Name -eq $target -and
+        $_.Current.ControlType.ProgrammaticName -ne "ControlType.Button"
+    } catch { $false }
+  })
+  if ($targetNodes.Count -eq 0) { continue }
+  $visibleTarget = $targetNodes | Where-Object {
+    try { -not $_.Current.IsOffscreen } catch { $false }
+  } | Select-Object -First 1
+  if ($null -ne $visibleTarget) { break }
+  try {
+    $scrollPattern = $targetNodes[0].GetCurrentPattern(
+      [System.Windows.Automation.ScrollItemPattern]::Pattern
+    )
+    $scrollPattern.ScrollIntoView()
+  } catch {
+  }
+}
+
+if ($targetNodes.Count -eq 0) {
+  "ERR|CUSTOM_PET_NOT_FOUND"
+  exit 0
+}
+
+$selectedNames = @("Selected", "已选", "Selected $target", "已选 $target")
+$selectNames = @("Select", "选择", "Select $target", "选择 $target")
+$selectedButton = Find-RowButton -WindowRoot $root -TargetName $target -ButtonNames $selectedNames
+if ($null -ne $selectedButton) {
+  "OK|$target"
+  exit 0
+}
+
+$selectButton = Find-RowButton -WindowRoot $root -TargetName $target -ButtonNames $selectNames
+if ($null -eq $selectButton -or -not $selectButton.Current.IsEnabled) {
+  "ERR|SELECT_BUTTON_NOT_FOUND"
+  exit 0
+}
+
+try {
+  try { $selectButton.SetFocus() } catch { }
+  $pattern = $selectButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+  $pattern.Invoke()
+} catch {
+  "ERR|SELECT_INVOKE_FAILED"
+  exit 0
+}
+
+for ($verifyAttempt = 0; $verifyAttempt -lt 32; $verifyAttempt++) {
+  Start-Sleep -Milliseconds 250
+  $currentRoot = Get-PetsWindow
+  if ($null -eq $currentRoot) { continue }
+  $selectedButton = Find-RowButton -WindowRoot $currentRoot -TargetName $target -ButtonNames $selectedNames
+  if ($null -ne $selectedButton) {
+    "OK|$target"
+    exit 0
+  }
+}
+
+"ERR|SELECTION_NOT_CONFIRMED"
+"#;
+
+        let output = {
+            use std::os::windows::process::CommandExt;
+
+            std::process::Command::new("powershell.exe")
+                .args([
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                    script,
+                ])
+                .env("CODEX_USAGE_PET_TARGET", display_name)
+                .creation_flags(0x08000000)
+                .output()
+        }
+        .map_err(|error| {
+            format!("POWERSHELL_START_FAILED::Could not start Windows UI Automation ({error})")
+        })?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let result_line = stdout
+            .lines()
+            .map(str::trim)
+            .find(|line| line.starts_with("OK|") || line.starts_with("ERR|"))
+            .unwrap_or("");
+        if let Some(selected_name) = result_line.strip_prefix("OK|") {
+            return Ok(OfficialPetSyncResult {
+                pet_id: "custom".to_string(),
+                display_name: selected_name.to_string(),
+                method: "windows-ui-automation",
+            });
+        }
+
+        let code = result_line
+            .strip_prefix("ERR|")
+            .unwrap_or("AUTOMATION_FAILED");
+        let message = match code {
+            "CHATGPT_NOT_RUNNING" => "Open the official ChatGPT desktop app first.",
+            "PETS_SETTINGS_NOT_OPEN" => "Open ChatGPT Settings > Pets, then try again.",
+            "PETS_REFRESH_FAILED" => "The official Pets list could not be refreshed.",
+            "CUSTOM_PET_NOT_FOUND" => "The installed custom pet did not appear after refresh.",
+            "SELECT_BUTTON_NOT_FOUND" => {
+                "The custom pet was found, but its Select button was unavailable."
+            }
+            "SELECT_INVOKE_FAILED" => "The custom pet Select button could not be invoked.",
+            "SELECTION_NOT_CONFIRMED" => {
+                "The official Pets page did not confirm the selected custom pet."
+            }
+            _ => "The custom pet could not be selected.",
+        };
+        Err(format!("{code}::{message}"))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = display_name;
+        Err("UNSUPPORTED_PLATFORM::Official custom pet sync is currently Windows-only".into())
+    }
+}
+
+#[tauri::command]
+async fn sync_official_custom_pet(display_name: String) -> Result<OfficialPetSyncResult, String> {
+    tauri::async_runtime::spawn_blocking(move || perform_official_custom_pet_sync(&display_name))
+        .await
+        .map_err(|error| format!("OFFICIAL_CUSTOM_PET_TASK::{error}"))?
+}
+
 fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -221,6 +539,23 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::perform_official_custom_pet_sync;
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore = "requires the official Codex Pets page and CODEX_USAGE_TEST_PET"]
+    fn selects_a_live_custom_pet_through_windows_ui_automation() {
+        let target = std::env::var("CODEX_USAGE_TEST_PET")
+            .expect("CODEX_USAGE_TEST_PET must name a visible installed custom pet");
+        let result = perform_official_custom_pet_sync(&target)
+            .expect("the official Pets page should select and confirm the target pet");
+        assert_eq!(result.display_name, target);
+        assert_eq!(result.method, "windows-ui-automation");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -235,7 +570,10 @@ pub fn run() {
             dashboard_snapshot,
             start_chatgpt_login,
             wait_for_chatgpt_login,
-            restart_app_server
+            restart_app_server,
+            sync_official_custom_pet,
+            fetch_petdex_manifest,
+            install_petdex_pet
         ])
         .setup(|app| {
             build_tray(app.handle())?;

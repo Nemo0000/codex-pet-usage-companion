@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
   AlertCircle,
+  ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
   Copy,
   LoaderCircle,
   LogIn,
+  PawPrint,
   RefreshCw,
   Settings,
   TerminalSquare,
@@ -37,6 +39,7 @@ import {
 import type { DashboardSnapshot, UserSettings } from "./types";
 
 type ViewStatus = "loading" | "ready" | "unauthenticated" | "login-pending" | "error";
+type PanelView = "settings" | "community";
 
 const SETTINGS_KEY = "codex-usage-companion.settings.v1";
 const WINDOW_POSITION_KEY = "codex-usage-companion.position.v1";
@@ -50,7 +53,12 @@ const DEFAULT_SETTINGS: UserSettings = {
 function loadSettings(): UserSettings {
   try {
     const parsed = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "null") as Partial<UserSettings> | null;
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    return {
+      language: parsed?.language === "zh-CN" || parsed?.language === "en" ? parsed.language : DEFAULT_SETTINGS.language,
+      theme: parsed?.theme === "system" || parsed?.theme === "light" || parsed?.theme === "dark" ? parsed.theme : DEFAULT_SETTINGS.theme,
+      metric: parsed?.metric === "remaining" || parsed?.metric === "used" ? parsed.metric : DEFAULT_SETTINGS.metric,
+      compact: typeof parsed?.compact === "boolean" ? parsed.compact : DEFAULT_SETTINGS.compact,
+    };
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -89,6 +97,7 @@ export default function App() {
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [panelView, setPanelView] = useState<PanelView>("settings");
   const [loginBusy, setLoginBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -102,7 +111,6 @@ export default function App() {
     [snapshot?.rateLimits, language],
   );
   const compactLimit = useMemo(() => selectCompactLimit(limits), [limits]);
-
   const refresh = useCallback(async (quiet = false) => {
     if (!quiet || !snapshot) setRefreshing(true);
     try {
@@ -225,6 +233,11 @@ export default function App() {
     }
   };
 
+  const openPanel = (view: PanelView) => {
+    setPanelView(view);
+    setSettingsOpen(true);
+  };
+
   const handleAutostartChange = async (enabled: boolean) => {
     if (enabled) await enable();
     else await disable();
@@ -285,7 +298,7 @@ export default function App() {
             <button className="icon-button" type="button" onClick={() => void handleCompactToggle()} aria-label={translate(language, "compact")} disabled={status !== "ready" || limits.length === 0}>
               <ChevronsDownUp size={17} aria-hidden="true" />
             </button>
-            <button className="icon-button" type="button" onClick={() => setSettingsOpen(true)} aria-label={translate(language, "settings")}>
+            <button className="icon-button" type="button" onClick={() => openPanel("settings")} aria-label={translate(language, "settings")}>
               <Settings size={17} aria-hidden="true" />
             </button>
             <button className="icon-button" type="button" onClick={hideWindow} aria-label={translate(language, "hide")}>
@@ -342,6 +355,15 @@ export default function App() {
                 <span className="plan-badge">{planName}</span>
               </section>
 
+              <button className="pet-home-entry" type="button" onClick={() => openPanel("community")}>
+                <span className="pet-home-entry__icon" aria-hidden="true"><PawPrint size={17} /></span>
+                <span className="pet-home-entry__copy">
+                  <strong>{translate(language, "changePet")}</strong>
+                  <small>{translate(language, "changePetHint")}</small>
+                </span>
+                <ChevronRight size={17} aria-hidden="true" />
+              </button>
+
               {limits.length > 0 ? (
                 <section className="limits-list" aria-live="polite">
                   {limits.map((limit) => (
@@ -380,6 +402,7 @@ export default function App() {
       {settingsOpen && (
         <SettingsPanel
           settings={settings}
+          initialView={panelView}
           autostart={autostart}
           alwaysOnTop={alwaysOnTop}
           onChange={setSettings}

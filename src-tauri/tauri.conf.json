@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Codex Usage Companion",
-  "version": "0.1.1",
+  "productName": "Codex Pet & Usage Companion",
+  "version": "0.3.3",
   "identifier": "dev.codexusage.companion",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Codex Usage Companion",
+        "title": "Codex Pet & Usage Companion",
         "width": 380,
         "height": 560,
         "resizable": false,
@@ -28,15 +28,15 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost https://assets.petdex.dev; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost"
     }
   },
   "bundle": {
     "active": true,
     "targets": ["nsis"],
     "category": "Utility",
-    "shortDescription": "View Codex usage limits from a floating local panel.",
-    "longDescription": "A local-first Windows tray app and floating panel for viewing ChatGPT-backed Codex usage limits through the official Codex App Server.",
+    "shortDescription": "Switch Codex pets and view usage limits from a lightweight Windows panel.",
+    "longDescription": "A local-first Windows tray app for switching community Codex pets and viewing ChatGPT-backed usage limits through the official Codex App Server.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

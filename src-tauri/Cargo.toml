@@ -1,8 +1,8 @@
 [package]
 name = "codex-usage-companion"
-version = "0.1.1"
-description = "A local-first floating usage companion for Codex"
-authors = ["Codex Usage Companion contributors"]
+version = "0.3.3"
+description = "A local-first Windows companion for switching Codex pets and viewing usage limits"
+authors = ["Codex Pet & Usage Companion contributors"]
 edition = "2021"
 license = "MIT"
 
@@ -14,6 +14,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "webp"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["tray-icon", "image-png"] }

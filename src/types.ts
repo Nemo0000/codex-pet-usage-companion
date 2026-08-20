@@ -69,6 +69,7 @@ export interface OfficialPetSyncResult {
   displayName: string;
   method: "windows-ui-automation";
   startedProcess: boolean;
+  openedMenu: boolean;
   openedSettings: boolean;
 }
 

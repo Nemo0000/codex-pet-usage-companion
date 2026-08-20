@@ -1,6 +1,6 @@
 # Codex Pet & Usage Companion
 
-[![CI](https://github.com/Nemo0000/codex-usage-companion/actions/workflows/ci.yml/badge.svg)](https://github.com/Nemo0000/codex-usage-companion/actions/workflows/ci.yml)
+[![CI](https://github.com/Nemo0000/codex-pet-usage-companion/actions/workflows/ci.yml/badge.svg)](https://github.com/Nemo0000/codex-pet-usage-companion/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Codex Pet & Usage Companion is an independent, local-first Windows tray app for switching community Codex pets and viewing ChatGPT-backed usage limits from one compact panel.
@@ -20,6 +20,9 @@ Codex Pet & Usage Companion is an independent, local-first Windows tray app for 
 - Open the Petdex community gallery directly from the homepage with **Change pet**.
 - Browse thousands of community-made Petdex pets with search, kind filters, attribution, and installed-state indicators.
 - Install a Petdex pet into `.codex/pets`, or install it and immediately attempt to select it in the official Codex desktop app.
+- Automatically launch the official desktop app and navigate to Settings > Pets when the Windows UI allows it.
+- Configure an optional ChatGPT/Codex executable path when automatic discovery is unavailable.
+- Uninstall a locally installed Petdex package without touching official client files.
 
 ## Screenshots
 
@@ -29,7 +32,15 @@ Codex Pet & Usage Companion is an independent, local-first Windows tray app for 
 
 ### Pet switcher
 
-![Petdex community pet switcher](docs/screenshots/petdex-gallery-en.png)
+![Live Petdex community pet switcher](docs/screenshots/petdex-gallery-real-zh.png)
+
+### Pet switcher layout (English)
+
+The English capture below shows the localized layout. The live captures use the Petdex manifest and real community pet artwork, including installed-state and uninstall examples:
+
+![Petdex community pet switcher in English](docs/screenshots/petdex-gallery-en.png)
+
+![Live Petdex pagination and management](docs/screenshots/petdex-gallery-real-page-zh.png)
 
 ## How it works
 
@@ -39,13 +50,13 @@ The app launches `codex app-server` locally and communicates over its stable `st
 
 The app includes an in-app client for the public [Petdex](https://petdex.dev/) manifest. It does not run a second floating mascot: it downloads the selected community package, validates its trusted asset URLs, metadata, size, image format, and v1/v2 sprite grid, then installs it under `.codex/pets/<pet-id>` for the official Codex app.
 
-**Install only** adds the package without changing the active pet. **Install and use** additionally refreshes the already-open official Pets page, invokes its visible **Select** button, and checks for the **Selected** state. If UI automation is unavailable or the official UI changes, the package remains safely installed and the app asks the user to select it manually.
+**Install only** adds the package without changing the active pet. **Install and use** refreshes the official Pets page, launches the desktop app when a trusted local executable is available, opens Settings > Pets through visible Windows UI Automation, invokes the visible **Select** button, and checks for the **Selected** state. If navigation or UI automation is unavailable, the package remains safely installed and the app asks the user to select it manually.
 
 Pet assets remain owned by their Petdex submitters. The gallery links to each source page so users can review attribution and licensing before redistributing an asset.
 
 ## Download
 
-Download the latest Windows x64 installer from [GitHub Releases](https://github.com/Nemo0000/codex-usage-companion/releases).
+Download the latest Windows x64 installer from [GitHub Releases](https://github.com/Nemo0000/codex-pet-usage-companion/releases).
 
 The initial release is an unsigned installer. Windows may display a warning before installation; users should verify the release source and checksum before running a downloaded installer.
 
@@ -71,6 +82,8 @@ codex app-server --help
 3. Launch Codex Pet & Usage Companion from the Start menu or desktop shortcut.
 4. If Codex is not signed in, choose **Reconnect** and complete the official browser flow.
 5. Use the tray icon to show or hide the panel. Closing the panel hides it instead of exiting the app.
+
+For **Install and use**, keep the official desktop app installed. The companion first tries standard Windows locations, then the optional path in Settings. You can still open Settings > Pets manually if the official UI does not expose the expected controls.
 
 ## Development
 
@@ -117,9 +130,13 @@ Subscription rate-limit information requires a ChatGPT-backed Codex account. API
 
 The close button hides the panel. Use the tray icon to show it again, or right-click the tray icon and choose **Show panel**.
 
+### Automatic pet switching did not finish
+
+The bridge uses only visible Windows UI Automation. Confirm the official desktop app is installed, optionally set its `.exe` path under **Settings > Official desktop app**, and retry **Install and use**. If navigation is unavailable after an official UI update, select the newly installed pet manually on Settings > Pets; the package remains safely installed.
+
 ## Current scope
 
-Version `0.3.3` includes the Petdex community gallery, validated v1/v2 package installation, installed-state tracking, and the verified Windows UI Automation bridge used by **Install and use**. The homepage **Change pet** entry opens the gallery directly; Settings contains only general app preferences. Community packages are written only under `.codex/pets`; official client installation files are not modified.
+Version `0.4.0` includes the Petdex community gallery, validated v1/v2 package installation, installed-pet management, automatic official desktop launch and Settings > Pets navigation, and the verified Windows UI Automation bridge used by **Install and use**. The homepage **Change pet** entry opens the gallery directly. Settings contains general preferences plus an optional official desktop executable path. Community packages are written only under `.codex/pets`; official client installation files are not modified.
 
 ## Roadmap
 

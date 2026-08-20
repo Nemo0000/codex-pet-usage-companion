@@ -61,12 +61,15 @@ export interface UserSettings {
   theme: ThemePreference;
   metric: MetricPreference;
   compact: boolean;
+  officialDesktopPath: string;
 }
 
 export interface OfficialPetSyncResult {
   petId: "custom";
   displayName: string;
   method: "windows-ui-automation";
+  startedProcess: boolean;
+  openedSettings: boolean;
 }
 
 export interface PetdexPet {
@@ -92,4 +95,10 @@ export interface PetdexInstallResult {
   alreadyInstalled: boolean;
   spriteVersionNumber: 1 | 2;
   method: "petdex-community-package";
+}
+
+export interface PetdexUninstallResult {
+  slug: string;
+  removed: boolean;
+  directoryPath: string;
 }

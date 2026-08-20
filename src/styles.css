@@ -666,6 +666,12 @@ legend {
 
 .setting-row:last-child { border-bottom: 0; }
 
+.setting-row--stacked {
+  display: grid;
+  justify-content: stretch;
+  gap: 8px;
+}
+
 .setting-row > span:first-child,
 .setting-row--switch > span:first-child {
   min-width: 0;
@@ -693,6 +699,25 @@ legend {
   border-radius: 9px;
   color: var(--text);
   background: var(--surface);
+}
+
+.setting-path-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: 10px;
+}
+
+.setting-path-input:focus {
+  border-color: var(--focus);
+  outline: 0;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
 }
 
 .petdex-gallery {
@@ -990,6 +1015,31 @@ legend {
   color: var(--text);
   background: var(--surface-muted);
 }
+
+.petdex-uninstall-button {
+  display: inline-flex;
+  grid-column: 1 / -1;
+  min-height: 29px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--border));
+  border-radius: 9px;
+  color: var(--danger);
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 680;
+  transition: background 160ms ease, border-color 160ms ease, transform 120ms ease;
+}
+
+.petdex-uninstall-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 54%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+}
+
+.petdex-uninstall-button:active:not(:disabled) { transform: translateY(1px); }
 
 .petdex-pagination {
   display: flex;

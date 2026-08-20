@@ -2,6 +2,14 @@
 
 All notable changes to Codex Usage Companion are documented here.
 
+## [0.4.0] - 2026-08-20
+
+- Added automatic Windows launch and visible Settings > Pets navigation for **Install and use** when the official desktop executable can be discovered.
+- Added an optional ChatGPT/Codex executable path in Settings for installations outside the standard Windows locations.
+- Added safe uninstall controls for locally installed Petdex packages with confirmation and installed-state refresh.
+- Added explicit launch, navigation, loading, and manual-fallback messaging in English and Simplified Chinese.
+- Kept the bridge limited to user-triggered visible UI Automation; official client files, cookies, and access tokens are not modified or stored.
+
 ## [0.3.3] - 2026-08-17
 
 - Added a homepage **Change pet** entry that opens the Petdex community gallery directly.

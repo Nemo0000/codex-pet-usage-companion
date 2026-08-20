@@ -48,6 +48,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   theme: "system",
   metric: "remaining",
   compact: false,
+  officialDesktopPath: "",
 };
 
 function loadSettings(): UserSettings {
@@ -58,6 +59,7 @@ function loadSettings(): UserSettings {
       theme: parsed?.theme === "system" || parsed?.theme === "light" || parsed?.theme === "dark" ? parsed.theme : DEFAULT_SETTINGS.theme,
       metric: parsed?.metric === "remaining" || parsed?.metric === "used" ? parsed.metric : DEFAULT_SETTINGS.metric,
       compact: typeof parsed?.compact === "boolean" ? parsed.compact : DEFAULT_SETTINGS.compact,
+      officialDesktopPath: typeof parsed?.officialDesktopPath === "string" ? parsed.officialDesktopPath : DEFAULT_SETTINGS.officialDesktopPath,
     };
   } catch {
     return DEFAULT_SETTINGS;

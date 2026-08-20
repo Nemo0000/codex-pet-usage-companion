@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Search,
   Sparkles,
+  Trash2,
   WifiOff,
   X,
 } from "lucide-react";
@@ -29,10 +30,11 @@ import {
   openPetdexPetPage,
   parseBackendError,
   syncOfficialCustomPet,
+  uninstallPetdexPet,
 } from "../lib/platform";
 import type { Language, PetdexManifestResult, PetdexPet } from "../types";
 
-type InstallMode = "install" | "install-and-use";
+type InstallMode = "install" | "install-and-use" | "uninstall";
 type NoticeTone = "success" | "warning" | "error";
 
 interface GalleryNotice {
@@ -69,6 +71,12 @@ function syncErrorMessage(language: Language, code: string): string {
   const key: TranslationKey =
     code === "CHATGPT_NOT_RUNNING"
       ? "officialPetSyncChatGPTNotRunning"
+      : code === "CHATGPT_NOT_INSTALLED"
+        ? "officialPetSyncChatGPTNotInstalled"
+        : code === "CHATGPT_LAUNCH_FAILED"
+          ? "officialPetSyncLaunchFailed"
+          : code === "SETTINGS_NAVIGATION_FAILED"
+            ? "officialPetSyncSettingsNavigationFailed"
       : code === "PETS_SETTINGS_NOT_OPEN"
         ? "officialPetSyncSettingsClosed"
         : code === "CUSTOM_PET_NOT_FOUND"
@@ -95,7 +103,7 @@ function installErrorMessage(language: Language, code: string): string {
   return translate(language, key);
 }
 
-export function CommunityPetsPanel({ language }: { language: Language }) {
+export function CommunityPetsPanel({ language, officialDesktopPath }: { language: Language; officialDesktopPath: string }) {
   const [manifest, setManifest] = useState<PetdexManifestResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -166,7 +174,7 @@ export function CommunityPetsPanel({ language }: { language: Language }) {
       }
 
       try {
-        await syncOfficialCustomPet(installed.displayName);
+        await syncOfficialCustomPet(installed.displayName, officialDesktopPath);
         setNotice({
           tone: "success",
           text: translate(language, "petdexSelectedSuccess", { name: installed.displayName }),
@@ -181,6 +189,30 @@ export function CommunityPetsPanel({ language }: { language: Language }) {
           }),
         });
       }
+    } catch (caught) {
+      const { code } = parseBackendError(caught);
+      setNotice({ tone: "error", text: installErrorMessage(language, code) });
+    } finally {
+      setActiveAction(null);
+    }
+  };
+
+  const handleUninstall = async (pet: PetdexPet) => {
+    if (!window.confirm(translate(language, "petdexUninstallConfirm", { name: pet.displayName }))) return;
+    setActiveAction({ slug: pet.slug, mode: "uninstall" });
+    setNotice(null);
+    try {
+      await uninstallPetdexPet(pet.slug);
+      setManifest((current) => current && {
+        ...current,
+        pets: current.pets.map((candidate) =>
+          candidate.slug === pet.slug ? { ...candidate, installed: false } : candidate,
+        ),
+      });
+      setNotice({
+        tone: "success",
+        text: translate(language, "petdexUninstalledSuccess", { name: pet.displayName }),
+      });
     } catch (caught) {
       const { code } = parseBackendError(caught);
       setNotice({ tone: "error", text: installErrorMessage(language, code) });
@@ -312,6 +344,7 @@ export function CommunityPetsPanel({ language }: { language: Language }) {
             const installing = activeAction?.slug === pet.slug;
             const installOnly = installing && activeAction.mode === "install";
             const installAndUse = installing && activeAction.mode === "install-and-use";
+            const uninstalling = installing && activeAction.mode === "uninstall";
             return (
               <article className={`petdex-card${pet.installed ? " petdex-card--installed" : ""}`} key={pet.slug}>
                 <div className="petdex-card__visual">
@@ -352,6 +385,17 @@ export function CommunityPetsPanel({ language }: { language: Language }) {
                     {installAndUse ? <LoaderCircle className="spin" size={14} aria-hidden="true" /> : <Sparkles size={14} aria-hidden="true" />}
                     {translate(language, installAndUse ? "petdexSelecting" : "petdexInstallUse")}
                   </button>
+                  {pet.installed && (
+                    <button
+                      className="petdex-uninstall-button"
+                      type="button"
+                      onClick={() => void handleUninstall(pet)}
+                      disabled={busy}
+                    >
+                      {uninstalling ? <LoaderCircle className="spin" size={14} aria-hidden="true" /> : <Trash2 size={14} aria-hidden="true" />}
+                      {translate(language, uninstalling ? "petdexUninstalling" : "petdexUninstall")}
+                    </button>
+                  )}
                 </div>
               </article>
             );

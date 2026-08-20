@@ -75,6 +75,14 @@ pub(crate) struct PetdexInstallResult {
     method: &'static str,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PetdexUninstallResult {
+    slug: String,
+    removed: bool,
+    directory_path: String,
+}
+
 struct CachedManifest {
     loaded_at: Instant,
     manifest: RemoteManifest,
@@ -438,6 +446,40 @@ pub(crate) async fn install_petdex_pet(slug: String) -> Result<PetdexInstallResu
     tauri::async_runtime::spawn_blocking(move || install_pet(&slug))
         .await
         .map_err(|error| format!("PETDEX_TASK::{error}"))?
+}
+
+#[tauri::command]
+pub(crate) async fn uninstall_petdex_pet(slug: String) -> Result<PetdexUninstallResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if !valid_slug(&slug) {
+            return Err("PETDEX_NOT_FOUND::The selected Petdex pet ID is invalid".to_string());
+        }
+        let pets_directory = codex_pets_directory()?;
+        let destination = pets_directory.join(&slug);
+        if !destination.exists() {
+            return Ok(PetdexUninstallResult {
+                slug,
+                removed: false,
+                directory_path: destination.to_string_lossy().into_owned(),
+            });
+        }
+        let metadata = fs::symlink_metadata(&destination).map_err(|error| {
+            format!("PET_DIRECTORY::Could not inspect the local pet package ({error})")
+        })?;
+        if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+            return Err("PET_INSTALL_CONFLICT::The selected pet path is not a directory".into());
+        }
+        fs::remove_dir_all(&destination).map_err(|error| {
+            format!("PET_WRITE::Could not remove the local pet package ({error})")
+        })?;
+        Ok(PetdexUninstallResult {
+            slug,
+            removed: true,
+            directory_path: destination.to_string_lossy().into_owned(),
+        })
+    })
+    .await
+    .map_err(|error| format!("PETDEX_TASK::{error}"))?
 }
 
 #[cfg(test)]

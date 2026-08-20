@@ -2,7 +2,7 @@ mod app_server;
 mod petdex;
 
 use app_server::{AppServerClient, AppServerError};
-use petdex::{fetch_petdex_manifest, install_petdex_pet};
+use petdex::{fetch_petdex_manifest, install_petdex_pet, uninstall_petdex_pet};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{
@@ -44,6 +44,8 @@ struct OfficialPetSyncResult {
     pet_id: String,
     display_name: String,
     method: &'static str,
+    started_process: bool,
+    opened_settings: bool,
 }
 
 fn now_millis() -> u128 {
@@ -183,7 +185,10 @@ pub(crate) fn codex_pets_directory() -> Result<PathBuf, String> {
     Ok(PathBuf::from(home).join(".codex").join("pets"))
 }
 
-fn perform_official_custom_pet_sync(display_name: &str) -> Result<OfficialPetSyncResult, String> {
+fn perform_official_custom_pet_sync(
+    display_name: &str,
+    executable_path: Option<&str>,
+) -> Result<OfficialPetSyncResult, String> {
     let display_name = display_name.trim();
     if display_name.is_empty()
         || display_name.chars().count() > 80
@@ -213,17 +218,83 @@ public static class CodexPetWindowNative {
 }
 
 $target = $env:CODEX_USAGE_PET_TARGET
-$processes = @(Get-Process | Where-Object {
-  $_.ProcessName -in @("ChatGPT", "Codex")
-})
+$configuredExecutable = $env:CODEX_USAGE_PET_EXECUTABLE
+$startedProcess = $false
+$openedSettings = $false
+
+function Get-TargetProcesses {
+  @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+    if ($_.ProcessName -eq "ChatGPT") { return $true }
+    if ($_.ProcessName -ne "Codex") { return $false }
+    try {
+      return $_.Path -match "OpenAI|ChatGPT"
+    } catch {
+      return $_.MainWindowHandle -ne 0
+    }
+  })
+}
+
+$processes = @(Get-TargetProcesses)
 
 if ($processes.Count -eq 0) {
-  "ERR|CHATGPT_NOT_RUNNING"
-  exit 0
+  $candidates = @()
+  if (-not [string]::IsNullOrWhiteSpace($configuredExecutable)) {
+    $candidates += $configuredExecutable
+  }
+  $candidates += @(
+    "$env:LOCALAPPDATA\Programs\ChatGPT\ChatGPT.exe",
+    "$env:LOCALAPPDATA\Programs\OpenAI\ChatGPT\ChatGPT.exe",
+    "$env:ProgramFiles\ChatGPT\ChatGPT.exe",
+    "$env:LOCALAPPDATA\Programs\Codex\Codex.exe",
+    "$env:ProgramFiles\Codex\Codex.exe"
+  )
+  try {
+    $appx = Get-AppxPackage -Name "OpenAI.Codex" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $appx -and -not [string]::IsNullOrWhiteSpace($appx.InstallLocation)) {
+      $candidates += (Join-Path $appx.InstallLocation "app\ChatGPT.exe")
+    }
+  } catch {
+  }
+  $executable = $candidates |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
+    Select-Object -First 1
+  if ($null -eq $executable) {
+    "ERR|CHATGPT_NOT_INSTALLED"
+    exit 0
+  }
+  try {
+    Start-Process -FilePath $executable | Out-Null
+    $startedProcess = $true
+  } catch {
+    "ERR|CHATGPT_LAUNCH_FAILED"
+    exit 0
+  }
+  for ($launchAttempt = 0; $launchAttempt -lt 20; $launchAttempt++) {
+    Start-Sleep -Milliseconds 500
+    $processes = @(Get-TargetProcesses)
+    if ($processes.Count -gt 0) { break }
+  }
+  if ($processes.Count -eq 0) {
+    "ERR|CHATGPT_LAUNCH_FAILED"
+    exit 0
+  }
+}
+
+function Get-WindowNodes {
+  param([System.Windows.Automation.AutomationElement]$WindowRoot)
+  try {
+    return $WindowRoot.FindAll(
+      [System.Windows.Automation.TreeScope]::Descendants,
+      [System.Windows.Automation.Condition]::TrueCondition
+    )
+  } catch {
+    return @()
+  }
 }
 
 function Get-PetsWindow {
   $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+  $processes = @(Get-TargetProcesses)
   foreach ($process in $processes) {
     $condition = New-Object System.Windows.Automation.PropertyCondition(
       [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
@@ -251,6 +322,51 @@ function Get-PetsWindow {
     }
   }
   return $null
+}
+
+function Invoke-NamedControl {
+  param([string[]]$Names)
+  $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+  $processes = @(Get-TargetProcesses)
+  foreach ($process in $processes) {
+    $condition = New-Object System.Windows.Automation.PropertyCondition(
+      [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+      $process.Id
+    )
+    $windows = $desktop.FindAll(
+      [System.Windows.Automation.TreeScope]::Children,
+      $condition
+    )
+    foreach ($window in $windows) {
+      foreach ($node in @(Get-WindowNodes $window)) {
+        try {
+          if ($node.Current.Name -notin $Names -or $node.Current.IsOffscreen) { continue }
+          if ($node.Current.ControlType.ProgrammaticName -notin @(
+            "ControlType.Button", "ControlType.MenuItem", "ControlType.TabItem", "ControlType.ListItem", "ControlType.Hyperlink"
+          )) { continue }
+          $pattern = $node.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+          $pattern.Invoke()
+          return $true
+        } catch {
+        }
+      }
+    }
+  }
+  return $false
+}
+
+if ($null -eq (Get-PetsWindow)) {
+  if (Invoke-NamedControl @("Settings", "设置")) {
+    $openedSettings = $true
+  }
+  for ($navigationAttempt = 0; $navigationAttempt -lt 16; $navigationAttempt++) {
+    Start-Sleep -Milliseconds 350
+    if ($null -ne (Get-PetsWindow)) { break }
+    if (Invoke-NamedControl @("Pets", "宠物")) {
+      $openedSettings = $true
+      Start-Sleep -Milliseconds 350
+    }
+  }
 }
 
 function Find-RowButton {
@@ -312,7 +428,7 @@ function Find-RowButton {
 $root = Get-PetsWindow
 
 if ($null -eq $root) {
-  "ERR|PETS_SETTINGS_NOT_OPEN"
+  "ERR|SETTINGS_NAVIGATION_FAILED"
   exit 0
 }
 
@@ -381,6 +497,8 @@ $selectedNames = @("Selected", "已选", "Selected $target", "已选 $target")
 $selectNames = @("Select", "选择", "Select $target", "选择 $target")
 $selectedButton = Find-RowButton -WindowRoot $root -TargetName $target -ButtonNames $selectedNames
 if ($null -ne $selectedButton) {
+  if ($startedProcess) { "INFO|STARTED" }
+  if ($openedSettings) { "INFO|SETTINGS_OPENED" }
   "OK|$target"
   exit 0
 }
@@ -406,6 +524,8 @@ for ($verifyAttempt = 0; $verifyAttempt -lt 32; $verifyAttempt++) {
   if ($null -eq $currentRoot) { continue }
   $selectedButton = Find-RowButton -WindowRoot $currentRoot -TargetName $target -ButtonNames $selectedNames
   if ($null -ne $selectedButton) {
+    if ($startedProcess) { "INFO|STARTED" }
+    if ($openedSettings) { "INFO|SETTINGS_OPENED" }
     "OK|$target"
     exit 0
   }
@@ -428,6 +548,10 @@ for ($verifyAttempt = 0; $verifyAttempt -lt 32; $verifyAttempt++) {
                     script,
                 ])
                 .env("CODEX_USAGE_PET_TARGET", display_name)
+                .env(
+                    "CODEX_USAGE_PET_EXECUTABLE",
+                    executable_path.unwrap_or_default(),
+                )
                 .creation_flags(0x08000000)
                 .output()
         }
@@ -436,6 +560,10 @@ for ($verifyAttempt = 0; $verifyAttempt -lt 32; $verifyAttempt++) {
         })?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
+        let started_process = stdout.lines().any(|line| line.trim() == "INFO|STARTED");
+        let opened_settings = stdout
+            .lines()
+            .any(|line| line.trim() == "INFO|SETTINGS_OPENED");
         let result_line = stdout
             .lines()
             .map(str::trim)
@@ -446,6 +574,8 @@ for ($verifyAttempt = 0; $verifyAttempt -lt 32; $verifyAttempt++) {
                 pet_id: "custom".to_string(),
                 display_name: selected_name.to_string(),
                 method: "windows-ui-automation",
+                started_process,
+                opened_settings,
             });
         }
 
@@ -454,6 +584,15 @@ for ($verifyAttempt = 0; $verifyAttempt -lt 32; $verifyAttempt++) {
             .unwrap_or("AUTOMATION_FAILED");
         let message = match code {
             "CHATGPT_NOT_RUNNING" => "Open the official ChatGPT desktop app first.",
+            "CHATGPT_NOT_INSTALLED" => {
+                "ChatGPT desktop was not found. Configure its executable path in Settings."
+            }
+            "CHATGPT_LAUNCH_FAILED" => {
+                "ChatGPT desktop could not be started. Check the path or open it manually."
+            }
+            "SETTINGS_NAVIGATION_FAILED" => {
+                "The desktop app opened, but Settings > Pets could not be opened automatically."
+            }
             "PETS_SETTINGS_NOT_OPEN" => "Open ChatGPT Settings > Pets, then try again.",
             "PETS_REFRESH_FAILED" => "The official Pets list could not be refreshed.",
             "CUSTOM_PET_NOT_FOUND" => "The installed custom pet did not appear after refresh.",
@@ -472,15 +611,21 @@ for ($verifyAttempt = 0; $verifyAttempt -lt 32; $verifyAttempt++) {
     #[cfg(not(target_os = "windows"))]
     {
         let _ = display_name;
+        let _ = executable_path;
         Err("UNSUPPORTED_PLATFORM::Official custom pet sync is currently Windows-only".into())
     }
 }
 
 #[tauri::command]
-async fn sync_official_custom_pet(display_name: String) -> Result<OfficialPetSyncResult, String> {
-    tauri::async_runtime::spawn_blocking(move || perform_official_custom_pet_sync(&display_name))
-        .await
-        .map_err(|error| format!("OFFICIAL_CUSTOM_PET_TASK::{error}"))?
+async fn sync_official_custom_pet(
+    display_name: String,
+    executable_path: Option<String>,
+) -> Result<OfficialPetSyncResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        perform_official_custom_pet_sync(&display_name, executable_path.as_deref())
+    })
+    .await
+    .map_err(|error| format!("OFFICIAL_CUSTOM_PET_TASK::{error}"))?
 }
 
 fn show_main_window(app: &AppHandle) {
@@ -511,7 +656,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let mut builder = TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .tooltip("Codex Usage Companion")
+        .tooltip("Codex Pet & Usage Companion")
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => show_main_window(app),
             "refresh" => {
@@ -549,7 +694,7 @@ mod tests {
     fn selects_a_live_custom_pet_through_windows_ui_automation() {
         let target = std::env::var("CODEX_USAGE_TEST_PET")
             .expect("CODEX_USAGE_TEST_PET must name a visible installed custom pet");
-        let result = perform_official_custom_pet_sync(&target)
+        let result = perform_official_custom_pet_sync(&target, None)
             .expect("the official Pets page should select and confirm the target pet");
         assert_eq!(result.display_name, target);
         assert_eq!(result.method, "windows-ui-automation");
@@ -573,7 +718,8 @@ pub fn run() {
             restart_app_server,
             sync_official_custom_pet,
             fetch_petdex_manifest,
-            install_petdex_pet
+            install_petdex_pet,
+            uninstall_petdex_pet
         ])
         .setup(|app| {
             build_tray(app.handle())?;

@@ -90,7 +90,7 @@ export function SettingsPanel({
 
         <div ref={bodyRef} className={`settings-panel__body${activeView === "community" ? " settings-panel__body--community" : ""}`}>
           {activeView === "community" ? (
-            <CommunityPetsPanel language={language} />
+            <CommunityPetsPanel language={language} officialDesktopPath={settings.officialDesktopPath} />
           ) : (
             <>
               <fieldset>
@@ -142,6 +142,25 @@ export function SettingsPanel({
                   label={translate(language, "autostart")}
                   hint={translate(language, "autostartHint")}
                 />
+              </fieldset>
+
+              <fieldset>
+                <legend>{translate(language, "officialClient")}</legend>
+                <label className="setting-row setting-row--stacked">
+                  <span>
+                    <strong>{translate(language, "officialDesktopPath")}</strong>
+                    <small>{translate(language, "officialDesktopPathHint")}</small>
+                  </span>
+                  <input
+                    className="setting-path-input"
+                    type="text"
+                    value={settings.officialDesktopPath}
+                    placeholder={translate(language, "officialDesktopPathPlaceholder")}
+                    spellCheck={false}
+                    onChange={(event) => onChange({ ...settings, officialDesktopPath: event.target.value })}
+                    aria-label={translate(language, "officialDesktopPath")}
+                  />
+                </label>
               </fieldset>
             </>
           )}

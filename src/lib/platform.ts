@@ -6,6 +6,7 @@ import type {
   OfficialPetSyncResult,
   PetdexInstallResult,
   PetdexManifestResult,
+  PetdexUninstallResult,
 } from "../types";
 
 export function isTauriRuntime(): boolean {
@@ -56,11 +57,14 @@ export async function beginChatGptLogin(): Promise<LoginStartResult> {
   return result;
 }
 
-export async function syncOfficialCustomPet(displayName: string): Promise<OfficialPetSyncResult> {
+export async function syncOfficialCustomPet(displayName: string, executablePath = ""): Promise<OfficialPetSyncResult> {
   if (!isTauriRuntime()) {
     throw new Error("RUNTIME_UNAVAILABLE::Official custom pet sync requires the Windows desktop app");
   }
-  return invoke<OfficialPetSyncResult>("sync_official_custom_pet", { displayName });
+  return invoke<OfficialPetSyncResult>("sync_official_custom_pet", {
+    displayName,
+    executablePath: executablePath.trim() || null,
+  });
 }
 
 const mockPetdexManifest: PetdexManifestResult = {
@@ -122,6 +126,19 @@ export async function installPetdexPet(slug: string): Promise<PetdexInstallResul
     throw new Error("RUNTIME_UNAVAILABLE::Petdex installation requires the desktop app");
   }
   return invoke<PetdexInstallResult>("install_petdex_pet", { slug });
+}
+
+export async function uninstallPetdexPet(slug: string): Promise<PetdexUninstallResult> {
+  if (!/^[A-Za-z0-9_-]{1,96}$/.test(slug)) {
+    throw new Error("PETDEX_NOT_FOUND::The selected pet ID is invalid");
+  }
+  if (!isTauriRuntime()) {
+    if (import.meta.env.DEV) {
+      return { slug, removed: true, directoryPath: `.codex/pets/${slug}` };
+    }
+    throw new Error("RUNTIME_UNAVAILABLE::Petdex management requires the desktop app");
+  }
+  return invoke<PetdexUninstallResult>("uninstall_petdex_pet", { slug });
 }
 
 export async function openPetdexPetPage(slug: string): Promise<void> {

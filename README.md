@@ -136,7 +136,7 @@ The bridge uses only visible Windows UI Automation. Confirm the official desktop
 
 ## Current scope
 
-Version `0.4.0` includes the Petdex community gallery, validated v1/v2 package installation, installed-pet management, automatic official desktop launch and Settings > Pets navigation, and the verified Windows UI Automation bridge used by **Install and use**. The homepage **Change pet** entry opens the gallery directly. Settings contains general preferences plus an optional official desktop executable path. Community packages are written only under `.codex/pets`; official client installation files are not modified.
+Version `0.4.1` includes the Petdex community gallery, validated v1/v2 package installation, installed-pet management, automatic official desktop launch, menu fallback, Settings > Pets navigation, and the verified Windows UI Automation bridge used by **Install and use**. The homepage **Change pet** entry opens the gallery directly. Settings contains general preferences plus an optional official desktop executable path. Community packages are written only under `.codex/pets`; official client installation files are not modified.
 
 ## Roadmap
 

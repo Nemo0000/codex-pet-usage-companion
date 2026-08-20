@@ -501,7 +501,7 @@ dependencies = [
 
 [[package]]
 name = "codex-usage-companion"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "image",
  "reqwest 0.12.28",

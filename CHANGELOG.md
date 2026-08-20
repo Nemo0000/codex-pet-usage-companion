@@ -2,6 +2,13 @@
 
 All notable changes to Codex Usage Companion are documented here.
 
+## [0.4.1] - 2026-08-20
+
+- Completed the guided **Install and use** bridge with automatic app-window activation, menu fallback, Settings > Pets navigation, and stronger UI Automation pattern support.
+- Added startup recovery when the official desktop process exists but its interactive window is not ready yet.
+- Improved refresh, custom-pet matching, off-screen scrolling, selection invocation, and post-selection verification across English and Simplified Chinese labels.
+- Kept the bridge visible and user-triggered, with a safe manual fallback when the official UI cannot be automated.
+
 ## [0.4.0] - 2026-08-20
 
 - Added automatic Windows launch and visible Settings > Pets navigation for **Install and use** when the official desktop executable can be discovered.

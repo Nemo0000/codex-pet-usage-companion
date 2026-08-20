@@ -1,6 +1,6 @@
 [package]
 name = "codex-usage-companion"
-version = "0.4.0"
+version = "0.4.1"
 description = "A local-first Windows companion for switching Codex pets and viewing usage limits"
 authors = ["Codex Pet & Usage Companion contributors"]
 edition = "2021"

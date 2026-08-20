@@ -45,6 +45,7 @@ struct OfficialPetSyncResult {
     display_name: String,
     method: &'static str,
     started_process: bool,
+    opened_menu: bool,
     opened_settings: bool,
 }
 
@@ -220,6 +221,7 @@ public static class CodexPetWindowNative {
 $target = $env:CODEX_USAGE_PET_TARGET
 $configuredExecutable = $env:CODEX_USAGE_PET_EXECUTABLE
 $startedProcess = $false
+$openedMenu = $false
 $openedSettings = $false
 
 function Get-TargetProcesses {
@@ -234,12 +236,16 @@ function Get-TargetProcesses {
   })
 }
 
-$processes = @(Get-TargetProcesses)
+function Get-InteractiveProcesses {
+  @(Get-TargetProcesses | Where-Object {
+    try { $_.MainWindowHandle -ne 0 } catch { $false }
+  })
+}
 
-if ($processes.Count -eq 0) {
+function Get-ExecutableCandidates {
   $candidates = @()
   if (-not [string]::IsNullOrWhiteSpace($configuredExecutable)) {
-    $candidates += $configuredExecutable
+    $candidates += $configuredExecutable.Trim()
   }
   $candidates += @(
     "$env:LOCALAPPDATA\Programs\ChatGPT\ChatGPT.exe",
@@ -252,14 +258,22 @@ if ($processes.Count -eq 0) {
     $appx = Get-AppxPackage -Name "OpenAI.Codex" -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -ne $appx -and -not [string]::IsNullOrWhiteSpace($appx.InstallLocation)) {
       $candidates += (Join-Path $appx.InstallLocation "app\ChatGPT.exe")
+      $candidates += (Join-Path $appx.InstallLocation "ChatGPT.exe")
     }
   } catch {
   }
-  $executable = $candidates |
+  @($candidates |
     Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
-    Select-Object -First 1
+    Select-Object -Unique)
+}
+
+$processes = @(Get-TargetProcesses)
+
+if ($processes.Count -eq 0 -or @(Get-InteractiveProcesses).Count -eq 0) {
+  $executable = @(Get-ExecutableCandidates) | Select-Object -First 1
   if ($null -eq $executable) {
-    "ERR|CHATGPT_NOT_INSTALLED"
+    if ($processes.Count -eq 0) { "ERR|CHATGPT_NOT_INSTALLED" }
+    else { "ERR|CHATGPT_WINDOW_NOT_READY" }
     exit 0
   }
   try {
@@ -269,12 +283,12 @@ if ($processes.Count -eq 0) {
     "ERR|CHATGPT_LAUNCH_FAILED"
     exit 0
   }
-  for ($launchAttempt = 0; $launchAttempt -lt 20; $launchAttempt++) {
+  for ($launchAttempt = 0; $launchAttempt -lt 40; $launchAttempt++) {
     Start-Sleep -Milliseconds 500
     $processes = @(Get-TargetProcesses)
-    if ($processes.Count -gt 0) { break }
+    if ($processes.Count -gt 0 -and @(Get-InteractiveProcesses).Count -gt 0) { break }
   }
-  if ($processes.Count -eq 0) {
+  if ($processes.Count -eq 0 -or @(Get-InteractiveProcesses).Count -eq 0) {
     "ERR|CHATGPT_LAUNCH_FAILED"
     exit 0
   }
@@ -290,6 +304,53 @@ function Get-WindowNodes {
   } catch {
     return @()
   }
+}
+
+function Get-AppWindows {
+  $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+  $windows = @()
+  foreach ($process in @(Get-TargetProcesses)) {
+    try {
+      $condition = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+        $process.Id
+      )
+      $windows += @($desktop.FindAll(
+        [System.Windows.Automation.TreeScope]::Children,
+        $condition
+      ))
+    } catch {
+    }
+  }
+  return @($windows)
+}
+
+function Activate-AppWindow {
+  param([System.Windows.Automation.AutomationElement]$WindowRoot)
+  try {
+    $windowHandle = [IntPtr]$WindowRoot.Current.NativeWindowHandle
+    if ($windowHandle -ne [IntPtr]::Zero) {
+      [CodexPetWindowNative]::ShowWindowAsync($windowHandle, 9) | Out-Null
+      [CodexPetWindowNative]::SetForegroundWindow($windowHandle) | Out-Null
+      Start-Sleep -Milliseconds 300
+      return $true
+    }
+  } catch {
+  }
+  return $false
+}
+
+function Get-PrimaryAppWindow {
+  foreach ($window in @(Get-AppWindows)) {
+    try {
+      if ([IntPtr]$window.Current.NativeWindowHandle -ne [IntPtr]::Zero -and
+          -not $window.Current.IsOffscreen) {
+        return $window
+      }
+    } catch {
+    }
+  }
+  return $null
 }
 
 function Get-PetsWindow {
@@ -313,15 +374,55 @@ function Get-PetsWindow {
         $refresh = $windowNodes | Where-Object {
           try {
             $_.Current.ControlType.ProgrammaticName -eq "ControlType.Button" -and
-              $_.Current.Name -in @("Refresh", "刷新")
+              $_.Current.Name -in @("Refresh", "刷新", "Refresh pets", "刷新宠物", "Reload", "重新加载")
           } catch { $false }
         } | Select-Object -First 1
         if ($null -ne $refresh) { return $window }
+        $hasPetsLabel = @($windowNodes | Where-Object {
+          try { $_.Current.Name -in @("Pets", "宠物") -and -not $_.Current.IsOffscreen } catch { $false }
+        }).Count -gt 0
+        $hasSelectButton = @($windowNodes | Where-Object {
+          try {
+            $_.Current.ControlType.ProgrammaticName -eq "ControlType.Button" -and
+              $_.Current.Name -in @("Select", "选择") -and -not $_.Current.IsOffscreen
+          } catch { $false }
+        }).Count -gt 0
+        if ($hasPetsLabel -and $hasSelectButton) { return $window }
       } catch {
       }
     }
   }
   return $null
+}
+
+function Invoke-Node {
+  param([System.Windows.Automation.AutomationElement]$Node)
+  try { $Node.SetFocus() } catch { }
+  try {
+    $pattern = $Node.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+    $pattern.Invoke()
+    return $true
+  } catch {
+  }
+  try {
+    $pattern = $Node.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
+    $pattern.Select()
+    return $true
+  } catch {
+  }
+  try {
+    $pattern = $Node.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+    $pattern.Expand()
+    return $true
+  } catch {
+  }
+  try {
+    $pattern = $Node.GetCurrentPattern([System.Windows.Automation.LegacyIAccessiblePattern]::Pattern)
+    $pattern.DoDefaultAction()
+    return $true
+  } catch {
+  }
+  return $false
 }
 
 function Invoke-NamedControl {
@@ -344,9 +445,7 @@ function Invoke-NamedControl {
           if ($node.Current.ControlType.ProgrammaticName -notin @(
             "ControlType.Button", "ControlType.MenuItem", "ControlType.TabItem", "ControlType.ListItem", "ControlType.Hyperlink"
           )) { continue }
-          $pattern = $node.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
-          $pattern.Invoke()
-          return $true
+           if (Invoke-Node $node) { return $true }
         } catch {
         }
       }
@@ -356,13 +455,23 @@ function Invoke-NamedControl {
 }
 
 if ($null -eq (Get-PetsWindow)) {
+  $primaryWindow = Get-PrimaryAppWindow
+  if ($null -ne $primaryWindow) { Activate-AppWindow $primaryWindow | Out-Null }
   if (Invoke-NamedControl @("Settings", "设置")) {
     $openedSettings = $true
+  } elseif (Invoke-NamedControl @(
+    "Menu", "Open menu", "Open navigation", "Navigation menu", "More", "Account menu", "Profile menu", "User menu", "Open account menu", "更多", "菜单", "打开菜单", "打开导航菜单", "账户菜单", "用户菜单"
+  )) {
+    $openedMenu = $true
+    Start-Sleep -Milliseconds 400
+    if (Invoke-NamedControl @("Settings", "设置")) {
+      $openedSettings = $true
+    }
   }
-  for ($navigationAttempt = 0; $navigationAttempt -lt 16; $navigationAttempt++) {
+  for ($navigationAttempt = 0; $navigationAttempt -lt 40; $navigationAttempt++) {
     Start-Sleep -Milliseconds 350
     if ($null -ne (Get-PetsWindow)) { break }
-    if (Invoke-NamedControl @("Pets", "宠物")) {
+    if (Invoke-NamedControl @("Pets", "宠物", "Pet settings", "宠物设置")) {
       $openedSettings = $true
       Start-Sleep -Milliseconds 350
     }
@@ -386,7 +495,7 @@ function Find-RowButton {
 
   $targetNodes = @($allNodes | Where-Object {
     try {
-      $_.Current.Name -eq $TargetName -and
+       ($_.Current.Name -eq $TargetName -or $_.Current.Name.StartsWith($TargetName, [System.StringComparison]::OrdinalIgnoreCase)) -and
         $_.Current.ControlType.ProgrammaticName -ne "ControlType.Button" -and
         -not $_.Current.IsOffscreen
     } catch { $false }
@@ -402,7 +511,8 @@ function Find-RowButton {
         try {
           if (
             $node.Current.ControlType.ProgrammaticName -ne "ControlType.Button" -or
-            $node.Current.Name -notin $ButtonNames -or
+             (($node.Current.Name -notin $ButtonNames) -and
+               ($node.Current.AutomationId -notmatch "(?i)select|choose|selected")) -or
             $node.Current.IsOffscreen
           ) { continue }
           $buttonRect = $node.Current.BoundingRectangle
@@ -448,19 +558,18 @@ try {
   $refreshButton = $nodes | Where-Object {
     try {
       $_.Current.ControlType.ProgrammaticName -eq "ControlType.Button" -and
-        $_.Current.Name -in @("Refresh", "刷新")
+        $_.Current.Name -in @("Refresh", "刷新", "Refresh pets", "刷新宠物", "Reload", "重新加载")
     } catch { $false }
   } | Select-Object -First 1
   if ($null -eq $refreshButton) { throw "refresh button missing" }
-  $refreshPattern = $refreshButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
-  $refreshPattern.Invoke()
+  if (-not (Invoke-Node $refreshButton)) { throw "refresh invoke failed" }
 } catch {
   "ERR|PETS_REFRESH_FAILED"
   exit 0
 }
 
 $targetNodes = @()
-for ($attempt = 0; $attempt -lt 16; $attempt++) {
+for ($attempt = 0; $attempt -lt 40; $attempt++) {
   Start-Sleep -Milliseconds 350
   $root = Get-PetsWindow
   if ($null -eq $root) { continue }
@@ -470,7 +579,7 @@ for ($attempt = 0; $attempt -lt 16; $attempt++) {
   )
   $targetNodes = @($nodes | Where-Object {
     try {
-      $_.Current.Name -eq $target -and
+       ($_.Current.Name -eq $target -or $_.Current.Name.StartsWith($target, [System.StringComparison]::OrdinalIgnoreCase)) -and
         $_.Current.ControlType.ProgrammaticName -ne "ControlType.Button"
     } catch { $false }
   })
@@ -498,6 +607,7 @@ $selectNames = @("Select", "选择", "Select $target", "选择 $target")
 $selectedButton = Find-RowButton -WindowRoot $root -TargetName $target -ButtonNames $selectedNames
 if ($null -ne $selectedButton) {
   if ($startedProcess) { "INFO|STARTED" }
+  if ($openedMenu) { "INFO|MENU_OPENED" }
   if ($openedSettings) { "INFO|SETTINGS_OPENED" }
   "OK|$target"
   exit 0
@@ -510,9 +620,7 @@ if ($null -eq $selectButton -or -not $selectButton.Current.IsEnabled) {
 }
 
 try {
-  try { $selectButton.SetFocus() } catch { }
-  $pattern = $selectButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
-  $pattern.Invoke()
+  if (-not (Invoke-Node $selectButton)) { throw "select invoke failed" }
 } catch {
   "ERR|SELECT_INVOKE_FAILED"
   exit 0
@@ -525,6 +633,7 @@ for ($verifyAttempt = 0; $verifyAttempt -lt 32; $verifyAttempt++) {
   $selectedButton = Find-RowButton -WindowRoot $currentRoot -TargetName $target -ButtonNames $selectedNames
   if ($null -ne $selectedButton) {
     if ($startedProcess) { "INFO|STARTED" }
+    if ($openedMenu) { "INFO|MENU_OPENED" }
     if ($openedSettings) { "INFO|SETTINGS_OPENED" }
     "OK|$target"
     exit 0
@@ -542,6 +651,7 @@ for ($verifyAttempt = 0; $verifyAttempt -lt 32; $verifyAttempt++) {
                     "-NoLogo",
                     "-NoProfile",
                     "-NonInteractive",
+                    "-Sta",
                     "-ExecutionPolicy",
                     "Bypass",
                     "-Command",
@@ -561,6 +671,7 @@ for ($verifyAttempt = 0; $verifyAttempt -lt 32; $verifyAttempt++) {
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let started_process = stdout.lines().any(|line| line.trim() == "INFO|STARTED");
+        let opened_menu = stdout.lines().any(|line| line.trim() == "INFO|MENU_OPENED");
         let opened_settings = stdout
             .lines()
             .any(|line| line.trim() == "INFO|SETTINGS_OPENED");
@@ -575,6 +686,7 @@ for ($verifyAttempt = 0; $verifyAttempt -lt 32; $verifyAttempt++) {
                 display_name: selected_name.to_string(),
                 method: "windows-ui-automation",
                 started_process,
+                opened_menu,
                 opened_settings,
             });
         }
@@ -589,6 +701,9 @@ for ($verifyAttempt = 0; $verifyAttempt -lt 32; $verifyAttempt++) {
             }
             "CHATGPT_LAUNCH_FAILED" => {
                 "ChatGPT desktop could not be started. Check the path or open it manually."
+            }
+            "CHATGPT_WINDOW_NOT_READY" => {
+                "ChatGPT desktop is running, but its window is not ready for automation yet. Try again in a moment."
             }
             "SETTINGS_NAVIGATION_FAILED" => {
                 "The desktop app opened, but Settings > Pets could not be opened automatically."

@@ -30,17 +30,13 @@ Codex Pet & Usage Companion is an independent, local-first Windows tray app for 
 
 ![Codex usage monitor](docs/screenshots/usage-home-en.png)
 
-### Pet switcher
+### Pet switcher (English)
 
-![Live Petdex community pet switcher](docs/screenshots/petdex-gallery-real-zh.png)
+These live captures use the Petdex manifest and real community pet artwork, including installed-state and uninstall examples:
 
-### Pet switcher layout (English)
+![Petdex community pet switcher in English](docs/screenshots/petdex-gallery-real-en.png)
 
-The English capture below shows the localized layout. The live captures use the Petdex manifest and real community pet artwork, including installed-state and uninstall examples:
-
-![Petdex community pet switcher in English](docs/screenshots/petdex-gallery-en.png)
-
-![Live Petdex pagination and management](docs/screenshots/petdex-gallery-real-page-zh.png)
+![Petdex community pet management in English](docs/screenshots/petdex-gallery-real-page-en.png)
 
 ## How it works
 

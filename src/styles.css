@@ -270,6 +270,57 @@ button:disabled {
   background: var(--surface);
 }
 
+.stale-data-banner,
+.low-usage-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: -2px 0 12px;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in srgb, var(--warning) 38%, var(--border));
+  border-radius: 12px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--warning) 10%, var(--surface));
+}
+
+.stale-data-banner {
+  align-items: center;
+  color: var(--warning);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.low-usage-banner--danger {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+}
+
+.low-usage-banner__icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--danger);
+}
+
+.low-usage-banner__copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.low-usage-banner__copy strong {
+  overflow: hidden;
+  color: var(--danger);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.low-usage-banner__copy small {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .account-card > div {
   min-width: 0;
 }
@@ -454,6 +505,18 @@ button:disabled {
   border-top: 1px solid var(--border);
   color: var(--text-muted);
   font-size: 10px;
+}
+
+.panel-footer__copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.panel-footer__copy small {
+  color: var(--text-muted);
+  font-size: 9px;
 }
 
 .refresh-button,

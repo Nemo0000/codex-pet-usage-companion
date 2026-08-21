@@ -23,6 +23,9 @@ Codex Pet & Usage Companion is an independent, local-first Windows tray app for 
 - Automatically launch the official desktop app and navigate to Settings > Pets when the Windows UI allows it.
 - Configure an optional ChatGPT/Codex executable path when automatic discovery is unavailable.
 - Uninstall a locally installed Petdex package without touching official client files.
+- Choose manual, 1-minute, 5-minute, or 15-minute usage refresh intervals.
+- Get an in-panel warning and best-effort Windows notification when a usage window falls below 20% remaining.
+- Keep the last known usage visible when a later refresh fails, with a clear stale-data state.
 
 ## Screenshots
 
@@ -122,6 +125,10 @@ Confirm that `codex --version` works in a new terminal, then restart the compani
 
 Subscription rate-limit information requires a ChatGPT-backed Codex account. API-key-only and Bedrock authentication may not expose these usage windows. Use **Reconnect** and complete the official browser flow.
 
+### Low-usage notifications
+
+The in-panel warning works independently of Windows notification permission. The first system notification may require permission from Windows, and notification behavior is most complete after installing the bundled app rather than running an unpackaged development build.
+
 ### The panel disappeared
 
 The close button hides the panel. Use the tray icon to show it again, or right-click the tray icon and choose **Show panel**.
@@ -132,7 +139,7 @@ The bridge uses only visible Windows UI Automation. Confirm the official desktop
 
 ## Current scope
 
-Version `0.4.1` includes the Petdex community gallery, validated v1/v2 package installation, installed-pet management, automatic official desktop launch, menu fallback, Settings > Pets navigation, and the verified Windows UI Automation bridge used by **Install and use**. The homepage **Change pet** entry opens the gallery directly. Settings contains general preferences plus an optional official desktop executable path. Community packages are written only under `.codex/pets`; official client installation files are not modified.
+Version `0.5.0` includes the Petdex community gallery, validated v1/v2 package installation, installed-pet management, automatic official desktop launch, menu fallback, Settings > Pets navigation, the verified Windows UI Automation bridge used by **Install and use**, and configurable usage refresh with low-usage alerts. The homepage **Change pet** entry opens the gallery directly. Settings contains general preferences, refresh controls, alert preferences, and an optional official desktop executable path. Community packages are written only under `.codex/pets`; official client installation files are not modified.
 
 ## Roadmap
 

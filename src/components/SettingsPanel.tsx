@@ -142,6 +142,30 @@ export function SettingsPanel({
                   label={translate(language, "autostart")}
                   hint={translate(language, "autostartHint")}
                 />
+                <label className="setting-row setting-row--stacked">
+                  <span>
+                    <strong>{translate(language, "refreshInterval")}</strong>
+                    <small>{translate(language, "refreshIntervalHint")}</small>
+                  </span>
+                  <select
+                    value={settings.refreshIntervalMinutes}
+                    onChange={(event) => onChange({
+                      ...settings,
+                      refreshIntervalMinutes: Number(event.target.value) as UserSettings["refreshIntervalMinutes"],
+                    })}
+                  >
+                    <option value="0">{translate(language, "refreshManual")}</option>
+                    <option value="1">{translate(language, "refreshOneMinute")}</option>
+                    <option value="5">{translate(language, "refreshFiveMinutes")}</option>
+                    <option value="15">{translate(language, "refreshFifteenMinutes")}</option>
+                  </select>
+                </label>
+                <Switch
+                  checked={settings.lowUsageAlerts}
+                  onChange={(enabled) => onChange({ ...settings, lowUsageAlerts: enabled })}
+                  label={translate(language, "lowUsageAlerts")}
+                  hint={translate(language, "lowUsageAlertsHint")}
+                />
               </fieldset>
 
               <fieldset>

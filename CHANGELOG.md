@@ -2,6 +2,14 @@
 
 All notable changes to Codex Usage Companion are documented here.
 
+## [0.5.0] - 2026-08-21
+
+- Added configurable automatic usage refresh intervals: manual, 1 minute, 5 minutes, or 15 minutes.
+- Added low-usage alerts when any rate-limit window falls to 20% remaining, with an in-panel warning and best-effort Windows system notification.
+- Added clear connected-without-usage, stale-data, loading, unauthenticated, and error states without replacing known data with false zeros.
+- Added refresh countdown context in the footer and guarded concurrent refresh requests from tray, timers, and manual actions.
+- Added matching Simplified Chinese and English settings, status messages, and notification copy.
+
 ## [0.4.1] - 2026-08-20
 
 - Completed the guided **Install and use** bridge with automatic app-window activation, menu fallback, Settings > Pets navigation, and stronger UI Automation pattern support.

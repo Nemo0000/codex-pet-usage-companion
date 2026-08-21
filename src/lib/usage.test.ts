@@ -4,6 +4,7 @@ import {
   formatWindowLabel,
   maskEmail,
   normalizeLimits,
+  lowestRemainingLimit,
   selectCompactLimit,
   severityForRemaining,
 } from "./usage";
@@ -37,6 +38,17 @@ describe("usage utilities", () => {
     expect(severityForRemaining(75)).toBe("safe");
     expect(severityForRemaining(35)).toBe("warning");
     expect(severityForRemaining(10)).toBe("danger");
+  });
+
+  it("finds the lowest remaining window without treating an empty list as zero", () => {
+    expect(lowestRemainingLimit([])).toBeNull();
+    const limits = normalizeLimits({
+      rateLimits: {
+        primary: { usedPercent: 91, windowDurationMins: 300 },
+        secondary: { usedPercent: 42, windowDurationMins: 10_080 },
+      },
+    }, "en");
+    expect(lowestRemainingLimit(limits)?.remainingPercent).toBe(9);
   });
 
   it("formats a stable countdown", () => {

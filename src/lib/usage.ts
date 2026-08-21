@@ -125,6 +125,13 @@ export function selectCompactLimit(limits: DisplayLimit[]): DisplayLimit | null 
   )[0];
 }
 
+export function lowestRemainingLimit(limits: DisplayLimit[]): DisplayLimit | null {
+  if (limits.length === 0) return null;
+  return limits.reduce((lowest, limit) =>
+    limit.remainingPercent < lowest.remainingPercent ? limit : lowest,
+  );
+}
+
 export function severityForRemaining(remaining: number): "safe" | "warning" | "danger" {
   if (remaining <= 20) return "danger";
   if (remaining <= 45) return "warning";

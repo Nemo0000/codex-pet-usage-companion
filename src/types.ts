@@ -61,6 +61,8 @@ export interface UserSettings {
   theme: ThemePreference;
   metric: MetricPreference;
   compact: boolean;
+  refreshIntervalMinutes: 0 | 1 | 5 | 15;
+  lowUsageAlerts: boolean;
   officialDesktopPath: string;
 }
 

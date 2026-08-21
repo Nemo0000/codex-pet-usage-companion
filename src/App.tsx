@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import {
   AlertCircle,
   ChevronRight,
@@ -23,6 +23,8 @@ import { StatePanel } from "./components/StatePanel";
 import { translate } from "./i18n";
 import {
   formatPlanName,
+  formatCountdown,
+  lowestRemainingLimit,
   maskEmail,
   normalizeLimits,
   selectCompactLimit,
@@ -36,9 +38,10 @@ import {
   restartAppServer,
   waitForChatGptLogin,
 } from "./lib/platform";
+import { sendLowUsageNotification } from "./lib/notifications";
 import type { DashboardSnapshot, UserSettings } from "./types";
 
-type ViewStatus = "loading" | "ready" | "unauthenticated" | "login-pending" | "error";
+type ViewStatus = "loading" | "ready" | "empty" | "unauthenticated" | "login-pending" | "error";
 type PanelView = "settings" | "community";
 
 const SETTINGS_KEY = "codex-usage-companion.settings.v1";
@@ -48,6 +51,8 @@ const DEFAULT_SETTINGS: UserSettings = {
   theme: "system",
   metric: "remaining",
   compact: false,
+  refreshIntervalMinutes: 5,
+  lowUsageAlerts: true,
   officialDesktopPath: "",
 };
 
@@ -59,6 +64,10 @@ function loadSettings(): UserSettings {
       theme: parsed?.theme === "system" || parsed?.theme === "light" || parsed?.theme === "dark" ? parsed.theme : DEFAULT_SETTINGS.theme,
       metric: parsed?.metric === "remaining" || parsed?.metric === "used" ? parsed.metric : DEFAULT_SETTINGS.metric,
       compact: typeof parsed?.compact === "boolean" ? parsed.compact : DEFAULT_SETTINGS.compact,
+      refreshIntervalMinutes: parsed?.refreshIntervalMinutes === 0 || parsed?.refreshIntervalMinutes === 1 || parsed?.refreshIntervalMinutes === 5 || parsed?.refreshIntervalMinutes === 15
+        ? parsed.refreshIntervalMinutes
+        : DEFAULT_SETTINGS.refreshIntervalMinutes,
+      lowUsageAlerts: typeof parsed?.lowUsageAlerts === "boolean" ? parsed.lowUsageAlerts : DEFAULT_SETTINGS.lowUsageAlerts,
       officialDesktopPath: typeof parsed?.officialDesktopPath === "string" ? parsed.officialDesktopPath : DEFAULT_SETTINGS.officialDesktopPath,
     };
   } catch {
@@ -68,11 +77,21 @@ function loadSettings(): UserSettings {
 
 function snapshotHasUsage(snapshot: DashboardSnapshot): boolean {
   const response = snapshot.rateLimits;
+  const bucketHasUsage = (bucket: NonNullable<DashboardSnapshot["rateLimits"]>["rateLimits"]): boolean =>
+    Boolean(
+      (bucket?.primary && typeof bucket.primary.usedPercent === "number") ||
+        (bucket?.secondary && typeof bucket.secondary.usedPercent === "number"),
+    );
   return Boolean(
-    snapshot.account ||
-      response?.rateLimits ||
-      Object.keys(response?.rateLimitsByLimitId ?? {}).length > 0,
+    bucketHasUsage(response?.rateLimits ?? null) ||
+      Object.values(response?.rateLimitsByLimitId ?? {}).some((bucket) => bucketHasUsage(bucket)),
   );
+}
+
+function statusForSnapshot(snapshot: DashboardSnapshot): ViewStatus {
+  if (snapshotHasUsage(snapshot)) return "ready";
+  if (snapshot.account) return "empty";
+  return "unauthenticated";
 }
 
 function LoadingPanel({ language }: { language: UserSettings["language"] }) {
@@ -103,8 +122,13 @@ export default function App() {
   const [loginBusy, setLoginBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [stale, setStale] = useState(false);
+  const [nextRefreshAt, setNextRefreshAt] = useState<number | null>(null);
   const [autostart, setAutostart] = useState(false);
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
+  const snapshotRef = useRef<DashboardSnapshot | null>(null);
+  const refreshInFlight = useRef<Promise<void> | null>(null);
+  const lowAlertKey = useRef<string | null>(null);
   const language = settings.language;
   const appWindow = useMemo(() => (isTauriRuntime() ? getCurrentWindow() : null), []);
 
@@ -113,20 +137,45 @@ export default function App() {
     [snapshot?.rateLimits, language],
   );
   const compactLimit = useMemo(() => selectCompactLimit(limits), [limits]);
+  const lowestLimit = useMemo(() => lowestRemainingLimit(limits), [limits]);
+  const commitSnapshot = useCallback((nextSnapshot: DashboardSnapshot) => {
+    snapshotRef.current = nextSnapshot;
+    setSnapshot(nextSnapshot);
+    setStatus(statusForSnapshot(nextSnapshot));
+  }, []);
   const refresh = useCallback(async (quiet = false) => {
-    if (!quiet || !snapshot) setRefreshing(true);
+    if (refreshInFlight.current) return refreshInFlight.current;
+    const hadSnapshot = Boolean(snapshotRef.current);
+    if (!quiet || !hadSnapshot) setRefreshing(true);
+    const request = (async () => {
+      try {
+        const nextSnapshot = await fetchDashboard();
+        commitSnapshot(nextSnapshot);
+        setError(null);
+        setStale(false);
+        if (settings.refreshIntervalMinutes > 0) {
+          setNextRefreshAt(Date.now() + settings.refreshIntervalMinutes * 60_000);
+        }
+      } catch (caught) {
+        const parsedError = parseBackendError(caught);
+        setError(parsedError);
+        if (snapshotRef.current) {
+          setStale(true);
+          setStatus(statusForSnapshot(snapshotRef.current));
+        } else {
+          setStatus("error");
+        }
+      } finally {
+        setRefreshing(false);
+      }
+    })();
+    refreshInFlight.current = request;
     try {
-      const nextSnapshot = await fetchDashboard();
-      setSnapshot(nextSnapshot);
-      setError(null);
-      setStatus(snapshotHasUsage(nextSnapshot) ? "ready" : "unauthenticated");
-    } catch (caught) {
-      setError(parseBackendError(caught));
-      setStatus("error");
+      await request;
     } finally {
-      setRefreshing(false);
+      if (refreshInFlight.current === request) refreshInFlight.current = null;
     }
-  }, [snapshot]);
+  }, [commitSnapshot, settings.refreshIntervalMinutes]);
 
   useEffect(() => {
     void refresh();
@@ -138,10 +187,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (status !== "ready") return;
-    const timer = window.setInterval(() => void refresh(true), 120_000);
+    const intervalMinutes = settings.refreshIntervalMinutes;
+    if (intervalMinutes === 0 || (status !== "ready" && status !== "empty")) {
+      setNextRefreshAt(null);
+      return;
+    }
+    const intervalMs = intervalMinutes * 60_000;
+    setNextRefreshAt(Date.now() + intervalMs);
+    const timer = window.setInterval(() => void refresh(true), intervalMs);
     return () => window.clearInterval(timer);
-  }, [status, refresh]);
+  }, [status, settings.refreshIntervalMinutes, refresh]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -151,6 +206,17 @@ export default function App() {
     });
     return () => dispose?.();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!settings.lowUsageAlerts || !lowestLimit || lowestLimit.remainingPercent > 20) {
+      lowAlertKey.current = null;
+      return;
+    }
+    const key = `${lowestLimit.id}:${lowestLimit.resetsAt ?? "none"}`;
+    if (lowAlertKey.current === key) return;
+    lowAlertKey.current = key;
+    void sendLowUsageNotification(language, lowestLimit.label, lowestLimit.remainingPercent);
+  }, [language, lowestLimit, settings.lowUsageAlerts]);
 
   useEffect(() => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -191,9 +257,9 @@ export default function App() {
     try {
       const login = await beginChatGptLogin();
       const nextSnapshot = await waitForChatGptLogin(login.loginId);
-      setSnapshot(nextSnapshot);
-      setStatus(snapshotHasUsage(nextSnapshot) ? "ready" : "unauthenticated");
-      if (snapshotHasUsage(nextSnapshot)) {
+      commitSnapshot(nextSnapshot);
+      setStale(false);
+      if (statusForSnapshot(nextSnapshot) === "ready" || statusForSnapshot(nextSnapshot) === "empty") {
         return;
       }
       throw new Error("LOGIN_INCOMPLETE::The browser sign-in completed without an account");
@@ -213,15 +279,21 @@ export default function App() {
   };
 
   const handleReconnect = async () => {
+    if (refreshInFlight.current) return;
     setRefreshing(true);
     try {
       const nextSnapshot = await restartAppServer();
-      setSnapshot(nextSnapshot);
+      commitSnapshot(nextSnapshot);
       setError(null);
-      setStatus(snapshotHasUsage(nextSnapshot) ? "ready" : "unauthenticated");
+      setStale(false);
     } catch (caught) {
       setError(parseBackendError(caught));
-      setStatus("error");
+      if (snapshotRef.current) {
+        setStale(true);
+        setStatus(statusForSnapshot(snapshotRef.current));
+      } else {
+        setStatus("error");
+      }
     } finally {
       setRefreshing(false);
     }
@@ -261,6 +333,11 @@ export default function App() {
   const formattedTime = snapshot
     ? new Intl.DateTimeFormat(language, { hour: "2-digit", minute: "2-digit" }).format(snapshot.fetchedAt)
     : "—";
+  const nextRefreshLabel = nextRefreshAt
+    ? nextRefreshAt <= now
+      ? translate(language, "justNow")
+      : formatCountdown(nextRefreshAt / 1_000, now, language)
+    : null;
   const planName = formatPlanName(snapshot?.account?.planType) || translate(language, "planUnknown");
 
   if (settings.compact && status === "ready" && compactLimit) {
@@ -290,9 +367,9 @@ export default function App() {
             <BrandMark />
             <div data-tauri-drag-region>
               <h1 data-tauri-drag-region>{translate(language, "appName")}</h1>
-              <span className={`connection-status connection-status--${status === "ready" ? "online" : "offline"}`}>
+              <span className={`connection-status connection-status--${status === "ready" || status === "empty" ? "online" : "offline"}`}>
                 <i aria-hidden="true" />
-                {translate(language, status === "ready" ? "connected" : "disconnected")}
+                {translate(language, status === "ready" ? "connected" : status === "empty" ? "connectedNoUsage" : "disconnected")}
               </span>
             </div>
           </div>
@@ -347,8 +424,14 @@ export default function App() {
             />
           )}
 
-          {status === "ready" && snapshot && (
+          {(status === "ready" || status === "empty") && snapshot && (
             <>
+              {stale && error && (
+                <div className="stale-data-banner" role="status">
+                  <AlertCircle size={15} aria-hidden="true" />
+                  <span>{translate(language, "staleData", { message: error.message })}</span>
+                </div>
+              )}
               <section className="account-card" aria-label={translate(language, "account")}>
                 <div>
                   <span className="account-card__eyebrow">{translate(language, "account")}</span>
@@ -365,6 +448,16 @@ export default function App() {
                 </span>
                 <ChevronRight size={17} aria-hidden="true" />
               </button>
+
+              {settings.lowUsageAlerts && lowestLimit && lowestLimit.remainingPercent <= 20 && (
+                <section className="low-usage-banner low-usage-banner--danger" role="alert">
+                  <AlertCircle className="low-usage-banner__icon" size={17} aria-hidden="true" />
+                  <div className="low-usage-banner__copy">
+                    <strong>{translate(language, "lowUsageWarning", { label: lowestLimit.label, percent: lowestLimit.remainingPercent })}</strong>
+                    <small>{translate(language, "lowUsageHint")}</small>
+                  </div>
+                </section>
+              )}
 
               {limits.length > 0 ? (
                 <section className="limits-list" aria-live="polite">
@@ -393,7 +486,10 @@ export default function App() {
         </div>
 
         <footer className="panel-footer">
-          <span>{translate(language, "lastUpdated", { time: formattedTime })}</span>
+          <div className="panel-footer__copy">
+            <span>{translate(language, "lastUpdated", { time: formattedTime })}</span>
+            {nextRefreshLabel && <small>{translate(language, "nextRefresh", { time: nextRefreshLabel })}</small>}
+          </div>
           <button className="refresh-button" type="button" onClick={() => void refresh()} disabled={refreshing || status === "loading"}>
             {refreshing ? <LoaderCircle className="spin" size={15} aria-hidden="true" /> : <RefreshCw size={15} aria-hidden="true" />}
             {translate(language, refreshing ? "refreshing" : "refresh")}

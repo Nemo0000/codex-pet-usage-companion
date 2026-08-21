@@ -11,3 +11,9 @@ Thank you for helping improve Codex Usage Companion.
 
 Bug reports should include the app version, operating system, Codex CLI version,
 expected behavior, and redacted error text.
+
+## Community contributions
+
+Documentation fixes, translations, reproducible testing notes, Petdex compatibility
+reports, and focused code changes are all welcome. Use the issue templates when
+opening a bug or feature request, and explain the user workflow your change improves.

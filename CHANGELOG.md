@@ -2,6 +2,12 @@
 
 All notable changes to Codex Usage Companion are documented here.
 
+## [Unreleased]
+
+- Added a bilingual README layout with direct download, release, CI, and documentation links.
+- Added English and Simplified Chinese getting-started guides.
+- Added transparent project-evidence guidance, a community-post draft, and GitHub issue forms for bug reports and feature requests.
+
 ## [0.5.0] - 2026-08-21
 
 - Added configurable automatic usage refresh intervals: manual, 1 minute, 5 minutes, or 15 minutes.

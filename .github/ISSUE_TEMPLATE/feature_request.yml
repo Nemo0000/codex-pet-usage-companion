@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest a focused improvement for Codex Pet & Usage Companion.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the user workflow, not only the proposed implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: dropdown
+    id: language
+    attributes:
+      label: Interface language
+      options:
+        - English
+        - 简体中文
+        - Both
+        - Not applicable

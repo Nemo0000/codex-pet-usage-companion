@@ -1,0 +1,36 @@
+name: Bug report
+description: Report a reproducible problem with the companion.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please remove emails, tokens, cookies, and raw App Server responses before posting.
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      placeholder: "0.5.0"
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include steps to reproduce and the expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted error details
+      description: Do not include credentials, cookies, tokens, or complete email addresses.

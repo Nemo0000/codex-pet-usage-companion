@@ -1,7 +1,23 @@
 # Codex Pet & Usage Companion
 
-[![CI](https://github.com/Nemo0000/codex-pet-usage-companion/actions/workflows/ci.yml/badge.svg)](https://github.com/Nemo0000/codex-pet-usage-companion/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <strong>Switch Codex pets and monitor usage limits from one lightweight Windows tray panel.</strong><br />
+  <sub>Local-first · Privacy-conscious · English and Simplified Chinese</sub>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Nemo0000/codex-pet-usage-companion/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/Nemo0000/codex-pet-usage-companion?display_name=tag&sort=semver"></a>
+  <a href="https://github.com/Nemo0000/codex-pet-usage-companion/releases"><img alt="Total downloads" src="https://img.shields.io/github/downloads/Nemo0000/codex-pet-usage-companion/total"></a>
+  <a href="https://github.com/Nemo0000/codex-pet-usage-companion/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/Nemo0000/codex-pet-usage-companion"></a>
+  <a href="https://github.com/Nemo0000/codex-pet-usage-companion/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Nemo0000/codex-pet-usage-companion/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Nemo0000/codex-pet-usage-companion/releases"><strong>Download latest Windows installer</strong></a>
+  · <a href="README.zh-CN.md">简体中文</a>
+  · <a href="docs/GETTING-STARTED.md">Getting started</a>
+</p>
 
 Codex Pet & Usage Companion is an independent, local-first Windows tray app for switching community Codex pets and viewing ChatGPT-backed usage limits from one compact panel.
 
@@ -26,6 +42,19 @@ Codex Pet & Usage Companion is an independent, local-first Windows tray app for 
 - Choose manual, 1-minute, 5-minute, or 15-minute usage refresh intervals.
 - Get an in-panel warning and best-effort Windows notification when a usage window falls below 20% remaining.
 - Keep the last known usage visible when a later refresh fails, with a clear stale-data state.
+
+## Why this exists
+
+Codex users often need two separate workflows: check subscription rate limits and open the official Pets settings to change a companion. This project brings those two tasks into one small tray panel while keeping authentication and usage data inside the official local Codex App Server flow.
+
+## Project evidence
+
+The repository exposes verifiable maintenance and usage signals instead of claiming private adoption numbers:
+
+- GitHub badges above show the current release, public download count, stars, and CI status.
+- The v0.5.0 release includes a changelog entry, a Windows installer, and a SHA-256 checksum in its notes.
+- The CI workflow runs type-checking, tests, and a production web build on every push and pull request.
+- The project does not collect telemetry, so download counts and public feedback remain the honest adoption signals.
 
 ## Screenshots
 
@@ -57,7 +86,14 @@ Pet assets remain owned by their Petdex submitters. The gallery links to each so
 
 Download the latest Windows x64 installer from [GitHub Releases](https://github.com/Nemo0000/codex-pet-usage-companion/releases).
 
-The initial release is an unsigned installer. Windows may display a warning before installation; users should verify the release source and checksum before running a downloaded installer.
+The installers are currently unsigned. Windows may display a warning before installation; users should verify the release source and checksum before running a downloaded installer.
+
+## Documentation
+
+- [Getting started (English)](docs/GETTING-STARTED.md)
+- [使用教程（简体中文）](docs/GETTING-STARTED.zh-CN.md)
+- [中文项目说明](README.zh-CN.md)
+- [Codex community post draft](docs/CODEX-COMMUNITY-POST.md)
 
 ## Requirements
 
